@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import seaborn as sns
 
 from anthropic import Anthropic
@@ -162,7 +163,255 @@ elif app_feature == "Attrition Drivers":
 elif app_feature == "Wellbeing/Performance":
     st.header("⚖️ Wellbeing & Performance Matrix")
     st.markdown("---")
-    # Your visualization logic goes here
+
+    # --- FILTERS ---
+    col_f1, col_f2, col_f3 = st.columns(3)
+
+    with col_f1:
+        companies = ["All"] + sorted(user_df["Company"].dropna().unique().tolist())
+        selected_company = st.selectbox("Company", companies)
+
+    with col_f2:
+        departments = ["All"] + sorted(user_df["Department"].dropna().unique().tolist())
+        selected_dept = st.selectbox("Department", departments)
+
+    with col_f3:
+        sat_levels = {"All": None, "Low (1)": 1, "Medium (2)": 2, "High (3)": 3, "Very High (4)": 4}
+        selected_sat_label = st.selectbox("Satisfaction Level (Job)", list(sat_levels.keys()))
+
+    # Apply filters to a working copy of the data
+    wb_df = user_df.copy()
+    if selected_company != "All":
+        wb_df = wb_df[wb_df["Company"] == selected_company]
+    if selected_dept != "All":
+        wb_df = wb_df[wb_df["Department"] == selected_dept]
+    if sat_levels[selected_sat_label] is not None:
+        wb_df = wb_df[wb_df["JobSatisfaction"] == sat_levels[selected_sat_label]]
+
+    st.markdown("---")
+
+    # Soft, easy-on-the-eyes colors: teal for Stayed, coral for Left
+    PALETTE = {"No": "#5BA4A4", "Yes": "#E07B6A"}
+    RATING_LABELS = ["Low (1)", "Medium (2)", "High (3)", "Very High (4)"]
+    FIGSIZE = (5, 3.8)
+
+    # Consistent card container styling for the 2x2 grid
+    st.markdown("""
+    <style>
+    div[data-testid="column"] > div[data-testid="stVerticalBlock"] {
+        background-color: #1e1e2e;
+        border-radius: 12px;
+        padding: 1rem 1rem 0.5rem 1rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    def style_chart(ax, title, xlabel, ylabel, legend_keys=None):
+        # Consistent styling with solid square legend patches — no line indicators
+        ax.set_title(title, fontsize=13, fontweight="bold", pad=12)
+        ax.set_xlabel(xlabel, fontsize=10, labelpad=10)
+        ax.set_ylabel(ylabel, fontsize=10)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.tick_params(axis="both", labelsize=9)
+        if legend_keys:
+            patches = [mpatches.Patch(facecolor=PALETTE[k],
+                                      label="Stayed" if k == "No" else "Left")
+                       for k in legend_keys]
+            ax.legend(handles=patches, fontsize=9, title="")
+
+    # --- SCORECARDS ---
+    sc1, sc2, sc3 = st.columns(3)
+    sc1.metric("Avg Job Satisfaction", f"{wb_df['JobSatisfaction'].mean():.2f} / 4")
+    sc2.metric("Avg Environment Satisfaction", f"{wb_df['EnvironmentSatisfaction'].mean():.2f} / 4")
+    sc3.metric("Avg Relationship Satisfaction", f"{wb_df['RelationshipSatisfaction'].mean():.2f} / 4")
+
+    st.markdown("---")
+
+    # --- JOB SATISFACTION SECTION ---
+    st.subheader("💼 Job Satisfaction")
+    st.caption("How satisfied employees are with their job, overtime load, and work-life balance — and whether that's linked to leaving.")
+
+    js_col1, js_col2, js_col3 = st.columns(3)
+
+    with js_col1:
+        js_data = wb_df.groupby(["JobSatisfaction", "Attrition"]).size().reset_index(name="Count")
+        fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
+        ax.set_facecolor("white")
+        sns.barplot(data=js_data, x="JobSatisfaction", y="Count", hue="Attrition",
+                    palette=PALETTE, ax=ax)
+        style_chart(ax, "Job Satisfaction", "Satisfaction Rating", "Number of Employees",
+                    legend_keys=["No", "Yes"])
+        ax.set_xticks([0, 1, 2, 3])
+        ax.set_xticklabels(RATING_LABELS)
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    with js_col2:
+        # Rename overtime values to plain business language before plotting
+        ot_df = wb_df.copy()
+        ot_df["OverTime"] = ot_df["OverTime"].map({"No": "No OT", "Yes": "Rendered OT"})
+        ot_data = ot_df.groupby(["OverTime", "Attrition"]).size().reset_index(name="Count")
+        fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
+        ax.set_facecolor("white")
+        sns.barplot(data=ot_data, x="OverTime", y="Count", hue="Attrition",
+                    palette=PALETTE, ax=ax)
+        style_chart(ax, "Overtime vs Attrition", "Overtime Status", "Number of Employees",
+                    legend_keys=["No", "Yes"])
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    with js_col3:
+        wlb_data = wb_df.groupby(["WorkLifeBalance", "Attrition"]).size().reset_index(name="Count")
+        fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
+        ax.set_facecolor("white")
+        sns.barplot(data=wlb_data, x="WorkLifeBalance", y="Count", hue="Attrition",
+                    palette=PALETTE, ax=ax)
+        style_chart(ax, "Work-Life Balance", "Balance Rating", "Number of Employees",
+                    legend_keys=["No", "Yes"])
+        ax.set_xticks([0, 1, 2, 3])
+        ax.set_xticklabels(RATING_LABELS)
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    st.markdown("---")
+
+    # --- ENVIRONMENT SATISFACTION SECTION ---
+    st.subheader("🏢 Environment Satisfaction")
+    st.caption("How comfortable employees feel in their physical and social work environment, and whether commute distance plays a role.")
+
+    env_col1, env_col2 = st.columns(2)
+
+    with env_col1:
+        env_data = wb_df.groupby(["EnvironmentSatisfaction", "Attrition"]).size().reset_index(name="Count")
+        fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
+        ax.set_facecolor("white")
+        sns.barplot(data=env_data, x="EnvironmentSatisfaction", y="Count", hue="Attrition",
+                    palette=PALETTE, ax=ax)
+        style_chart(ax, "Environment Satisfaction", "Satisfaction Rating", "Number of Employees",
+                    legend_keys=["No", "Yes"])
+        ax.set_xticks([0, 1, 2, 3])
+        ax.set_xticklabels(RATING_LABELS)
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    with env_col2:
+        bins = [0, 5, 10, 15, 20, 100]
+        labels_dist = ["0–5 km", "6–10 km", "11–15 km", "16–20 km", "20+ km"]
+        wb_df["DistanceBucket"] = pd.cut(wb_df["DistanceFromHome"], bins=bins, labels=labels_dist, right=True)
+        dist_data = wb_df.groupby(["DistanceBucket", "Attrition"], observed=True).size().reset_index(name="Count")
+        fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
+        ax.set_facecolor("white")
+        sns.barplot(data=dist_data, x="DistanceBucket", y="Count", hue="Attrition",
+                    palette=PALETTE, ax=ax)
+        style_chart(ax, "Distance From Home", "Commute Distance", "Number of Employees",
+                    legend_keys=["No", "Yes"])
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    st.markdown("---")
+
+    # --- RELATIONSHIP SATISFACTION SECTION ---
+    st.subheader("🤝 Relationship Satisfaction")
+    st.caption("How employees feel about their relationships at work — with peers and managers — and how long they've been with their current manager.")
+
+    rel_col1, rel_col2 = st.columns(2)
+
+    with rel_col1:
+        rs_data = wb_df.groupby(["RelationshipSatisfaction", "Attrition"]).size().reset_index(name="Count")
+        fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
+        ax.set_facecolor("white")
+        sns.barplot(data=rs_data, x="RelationshipSatisfaction", y="Count", hue="Attrition",
+                    palette=PALETTE, ax=ax)
+        style_chart(ax, "Relationship Satisfaction", "Satisfaction Rating", "Number of Employees",
+                    legend_keys=["No", "Yes"])
+        ax.set_xticks([0, 1, 2, 3])
+        ax.set_xticklabels(RATING_LABELS)
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    with rel_col2:
+        mgr_avg = wb_df.groupby("Attrition")["YearsWithCurrManager"].mean().reset_index()
+        mgr_avg["Label"] = mgr_avg["Attrition"].map({"No": "Stayed", "Yes": "Left"})
+        fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
+        ax.set_facecolor("white")
+        bars = ax.bar(mgr_avg["Label"], mgr_avg["YearsWithCurrManager"],
+                      color=[PALETTE[v] for v in mgr_avg["Attrition"]], width=0.4)
+        for bar in bars:
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
+                    f"{bar.get_height():.1f} yrs", ha="center", fontsize=10, fontweight="bold")
+        ax.set_title("Avg Years With Current Manager", fontsize=13, fontweight="bold", pad=12)
+        ax.set_xlabel("", fontsize=10)
+        ax.set_ylabel("Average Years", fontsize=10)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    rel_col3, rel_col4 = st.columns(2)
+
+    with rel_col3:
+        tenure_avg = wb_df.groupby("Attrition")["YearsAtCompany"].mean().reset_index()
+        tenure_avg["Label"] = tenure_avg["Attrition"].map({"No": "Stayed", "Yes": "Left"})
+        fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
+        ax.set_facecolor("white")
+        bars = ax.bar(tenure_avg["Label"], tenure_avg["YearsAtCompany"],
+                      color=[PALETTE[v] for v in tenure_avg["Attrition"]], width=0.4)
+        for bar in bars:
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
+                    f"{bar.get_height():.1f} yrs", ha="center", fontsize=10, fontweight="bold")
+        ax.set_title("Avg Years At Company", fontsize=13, fontweight="bold", pad=12)
+        ax.set_xlabel("", fontsize=10)
+        ax.set_ylabel("Average Years", fontsize=10)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+    with rel_col4:
+        # Line chart with bubble sizes — larger dot means more employees at that tenure year
+        mgr_line = wb_df.groupby("YearsWithCurrManager").agg(
+            AvgSat=("RelationshipSatisfaction", "mean"),
+            Count=("RelationshipSatisfaction", "count")
+        ).reset_index()
+
+        # Scale bubble size so the reader can see which data points are based on more employees
+        min_s, max_s = 40, 300
+        count_range = mgr_line["Count"].max() - mgr_line["Count"].min()
+        if count_range == 0:
+            mgr_line["BubbleSize"] = min_s
+        else:
+            mgr_line["BubbleSize"] = ((mgr_line["Count"] - mgr_line["Count"].min())
+                                       / count_range * (max_s - min_s) + min_s)
+
+        # Dynamic y-axis — don't start at 0 so small differences are visible
+        y_min = mgr_line["AvgSat"].min()
+        y_max = mgr_line["AvgSat"].max()
+        y_pad = max((y_max - y_min) * 0.4, 0.1)
+
+        fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
+        ax.set_facecolor("white")
+        ax.plot(mgr_line["YearsWithCurrManager"], mgr_line["AvgSat"],
+                color="#5BA4A4", linewidth=2, zorder=1)
+        ax.scatter(mgr_line["YearsWithCurrManager"], mgr_line["AvgSat"],
+                   s=mgr_line["BubbleSize"], color="#5BA4A4", alpha=0.85, zorder=2)
+        ax.set_ylim(y_min - y_pad, y_max + y_pad)
+        ax.set_title("Satisfaction by Manager Tenure", fontsize=13, fontweight="bold", pad=12)
+        ax.set_xlabel("Years With Current Manager\n(Bubble size = number of employees)", fontsize=9, labelpad=8)
+        ax.set_ylabel("Avg Relationship Satisfaction", fontsize=10)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close()
 
 elif app_feature == "Predictive Analytics":
     st.header("🔮 Machine Learning Predictive Analytics")
