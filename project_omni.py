@@ -153,16 +153,18 @@ if app_feature == "Executive Summary":
     
     st.subheader("Raw Data Operational Overview")
     st.dataframe(user_df.head(10), use_container_width=True)
+    # IR
 
 elif app_feature == "Attrition Drivers":
     st.header("🎯 Attrition Drivers Analysis")
     st.markdown("---")
-    # Your visualization logic goes here 
+    # Matt
+
 
 elif app_feature == "Wellbeing/Performance":
     st.header("⚖️ Wellbeing & Performance Matrix")
     st.markdown("---")
-    # Your visualization logic goes here
+    # Ruth
 
 elif app_feature == "Predictive Analytics":
     st.header("🔮 Machine Learning Predictive Analytics")
