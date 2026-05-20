@@ -47,6 +47,9 @@ The project includes several parts of analysis:
 7. **Employees to Review**  
    Creates a review list for active employees based on model probability and actionable risk signals. This is only meant for review and validation, not automatic decision-making.
 
+8. **Wellbeing & Performance Matrix**  
+   Visualizes employee wellbeing factors and their relationship to attrition. Covers job satisfaction, overtime, work-life balance, environment satisfaction, commute distance, relationship satisfaction, and tenure with current manager. All charts are split by attrition status (Stayed vs. Left) and include filters by company and department.
+
 ## Models Used
 
 The project compares three models:
