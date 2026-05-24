@@ -229,24 +229,32 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-def metric_card(label, value, subtext="", progress=None, progress_label=""):
+def metric_card(label, value, subtext="", progress=None, progress_label="", sample_size=None, fill_color=None):
     meter_block = ""
     if progress is not None:
         progress = max(0, min(1, float(progress)))
+        bar_color = fill_color if fill_color else "linear-gradient(90deg, #60a5fa, #f87171)"
+        # fill_color may be a solid hex — wrap in a gradient-compatible style
+        fill_style = f"background: {bar_color};" if bar_color.startswith("linear") else f"background-color: {bar_color};"
         meter_block = (
             f'<div class="meter-wrap">'
             f'<div class="meter-label">{progress_label}</div>'
             f'<div class="meter-track">'
-            f'<div class="meter-fill" style="width: {progress * 100:.1f}%;"></div>'
+            f'<div class="meter-fill" style="width: {progress * 100:.1f}%; {fill_style}"></div>'
             f'</div>'
             f'</div>'
         )
+    sample_block = (
+        f'<div style="font-size:0.72rem; color:#6b7280; margin-top:0.35rem;">Based on {sample_size:,} employees</div>'
+        if sample_size is not None else ""
+    )
     html = (
         f'<div class="attrition-card">'
         f'<div class="label">{label}</div>'
         f'<div class="value">{value}</div>'
         f'<div class="sub">{subtext}</div>'
         f'{meter_block}'
+        f'{sample_block}'
         f'</div>'
     )
     st.markdown(html, unsafe_allow_html=True)
@@ -1196,8 +1204,23 @@ elif app_feature == "Wellbeing/Performance":
         selected_dept = st.selectbox("Department", departments)
 
     with col_f3:
-        sat_levels = {"All": None, "Low (1)": 1, "Medium (2)": 2, "High (3)": 3, "Very High (4)": 4}
-        selected_sat_label = st.selectbox("Satisfaction Level (Job)", list(sat_levels.keys()))
+        _wb_date_col = next((c for c in ["Hire_Date", "Exit_Date"] if c in user_df.columns), None)
+        if _wb_date_col:
+            _parsed = pd.to_datetime(user_df[_wb_date_col], errors="coerce").dropna()
+            _abs_min = max(_parsed.min().date(), pd.Timestamp("2000-01-01").date())
+            _abs_max = _parsed.max().date()
+            import datetime as _dt
+            _month_options = []
+            _cur = pd.Timestamp(_abs_min).to_period("M")
+            _end_p = pd.Timestamp(_abs_max).to_period("M")
+            while _cur <= _end_p:
+                _month_options.append(_cur.strftime("%b %Y"))
+                _cur += 1
+            _month_options_rev = list(reversed(_month_options))
+            _wb_month = st.selectbox("Month Filter", ["All"] + _month_options_rev, key="wb_month_filter")
+        else:
+            _wb_date_col = None
+            _wb_month = "All"
 
     # Apply filters to a working copy of the data
     wb_df = user_df.copy()
@@ -1205,45 +1228,54 @@ elif app_feature == "Wellbeing/Performance":
         wb_df = wb_df[wb_df["Company"] == selected_company]
     if selected_dept != "All":
         wb_df = wb_df[wb_df["Department"] == selected_dept]
-    if sat_levels[selected_sat_label] is not None:
-        wb_df = wb_df[wb_df["JobSatisfaction"] == sat_levels[selected_sat_label]]
+    if _wb_date_col and _wb_month != "All":
+        wb_df[_wb_date_col] = pd.to_datetime(wb_df[_wb_date_col], errors="coerce")
+        _sel_period = pd.Period(_wb_month, freq="M")
+        wb_df = wb_df[wb_df[_wb_date_col].dt.to_period("M") == _sel_period]
 
     st.markdown("<div style='margin: 0.5rem 0;'></div>", unsafe_allow_html=True)
 
-    # Soft, easy-on-the-eyes colors: teal for Stayed, coral for Left
-    PALETTE = {"No": "#5BA4A4", "Yes": "#E07B6A"}
+    PALETTE = {"No": "#4CAF82", "Yes": "#E05C5C"}
+    CHART_BG = "none"
+    AXIS_BG = "none"
+    GRID_COLOR = "#374151"
+    FG = "#e5e7eb"
+    TITLE_FG = "#f9fafb"
     RATING_LABELS = ["Low (1)", "Medium (2)", "High (3)", "Very High (4)"]
     FIGSIZE = (5, 3.8)
 
-    # Consistent card container styling for the 2x2 grid
-    st.markdown("""
-    <style>
-    div[data-testid="column"] > div[data-testid="stVerticalBlock"] {
-        background-color: #1e1e2e;
-        border-radius: 12px;
-        padding: 1rem 1rem 0.5rem 1rem;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
     def style_chart(ax, title, xlabel, ylabel, legend_keys=None):
-        # Consistent styling with solid square legend patches — no line indicators
-        ax.set_title(title, fontsize=13, fontweight="bold", pad=12)
-        ax.set_xlabel(xlabel, fontsize=10, labelpad=10)
-        ax.set_ylabel(ylabel, fontsize=10)
+        ax.set_facecolor("none")
+        ax.figure.patch.set_alpha(0)
+        ax.set_title(title, fontsize=13, fontweight="bold", pad=12, color=TITLE_FG)
+        ax.set_xlabel(xlabel, fontsize=10, labelpad=10, color=FG)
+        ax.set_ylabel(ylabel, fontsize=10, color=FG)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        ax.tick_params(axis="both", labelsize=9)
+        ax.spines["left"].set_color(GRID_COLOR)
+        ax.spines["bottom"].set_color(GRID_COLOR)
+        ax.tick_params(axis="both", labelsize=9, colors=FG)
+        ax.grid(axis="y", color=GRID_COLOR, alpha=0.35)
+        ax.set_axisbelow(True)
         if legend_keys:
             patches = [mpatches.Patch(facecolor=PALETTE[k],
                                       label="Stayed" if k == "No" else "Left")
                        for k in legend_keys]
-            ax.legend(handles=patches, fontsize=9, title="")
+            ax.legend(handles=patches, fontsize=9, title="",
+                      facecolor="none", edgecolor=GRID_COLOR, labelcolor=FG)
 
     # --- SCORECARDS ---
     avg_job = wb_df['JobSatisfaction'].mean()
     avg_env = wb_df['EnvironmentSatisfaction'].mean()
     avg_rel = wb_df['RelationshipSatisfaction'].mean()
+    wb_sample = len(wb_df)
+
+    def _score_color(score):
+        if score < 2.4:
+            return "#ef4444"   # red
+        elif score < 2.8:
+            return "#f59e0b"   # amber
+        return None            # default gradient
 
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
@@ -1252,7 +1284,9 @@ elif app_feature == "Wellbeing/Performance":
             f"{avg_job:.2f} / 4",
             "Average job satisfaction across filtered employees",
             progress=avg_job / 4,
-            progress_label=f"{avg_job / 4:.0%} of maximum score"
+            progress_label=f"{avg_job / 4:.0%} of maximum score",
+            sample_size=wb_sample,
+            fill_color=_score_color(avg_job),
         )
     with sc2:
         metric_card(
@@ -1260,7 +1294,9 @@ elif app_feature == "Wellbeing/Performance":
             f"{avg_env:.2f} / 4",
             "Average environment satisfaction across filtered employees",
             progress=avg_env / 4,
-            progress_label=f"{avg_env / 4:.0%} of maximum score"
+            progress_label=f"{avg_env / 4:.0%} of maximum score",
+            sample_size=wb_sample,
+            fill_color=_score_color(avg_env),
         )
     with sc3:
         metric_card(
@@ -1268,7 +1304,9 @@ elif app_feature == "Wellbeing/Performance":
             f"{avg_rel:.2f} / 4",
             "Average relationship satisfaction across filtered employees",
             progress=avg_rel / 4,
-            progress_label=f"{avg_rel / 4:.0%} of maximum score"
+            progress_label=f"{avg_rel / 4:.0%} of maximum score",
+            sample_size=wb_sample,
+            fill_color=_score_color(avg_rel),
         )
 
     st.markdown("<div style='margin: 0.5rem 0;'></div>", unsafe_allow_html=True)
@@ -1280,174 +1318,174 @@ elif app_feature == "Wellbeing/Performance":
         js_col1, js_col2, js_col3 = st.columns(3)
 
         with js_col1:
-            js_data = wb_df.groupby(["JobSatisfaction", "Attrition"]).size().reset_index(name="Count")
-            fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
-            ax.set_facecolor("white")
-            sns.barplot(data=js_data, x="JobSatisfaction", y="Count", hue="Attrition",
-                        palette=PALETTE, ax=ax)
-            style_chart(ax, "Job Satisfaction", "Satisfaction Rating", "Number of Employees",
-                        legend_keys=["No", "Yes"])
-            ax.set_xticks([0, 1, 2, 3])
-            ax.set_xticklabels(RATING_LABELS)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            with st.container(border=True):
+                js_data = wb_df.groupby(["JobSatisfaction", "Attrition"]).size().reset_index(name="Count")
+                fig, ax = plt.subplots(figsize=FIGSIZE, facecolor=CHART_BG)
+                sns.barplot(data=js_data, x="JobSatisfaction", y="Count", hue="Attrition", palette=PALETTE, ax=ax)
+                style_chart(ax, "Job Satisfaction", "Satisfaction Rating", "Number of Employees", legend_keys=["No", "Yes"])
+                ax.set_xticks([0, 1, 2, 3])
+                ax.set_xticklabels(RATING_LABELS)
+                fig.tight_layout(pad=1.8)
+                st.pyplot(fig, use_container_width=True)
+                plt.close()
 
         with js_col2:
-            ot_df = wb_df.copy()
-            ot_df["OverTime"] = ot_df["OverTime"].map({"No": "No OT", "Yes": "Rendered OT"})
-            ot_data = ot_df.groupby(["OverTime", "Attrition"]).size().reset_index(name="Count")
-            fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
-            ax.set_facecolor("white")
-            sns.barplot(data=ot_data, x="OverTime", y="Count", hue="Attrition",
-                        palette=PALETTE, ax=ax)
-            style_chart(ax, "Overtime vs Attrition", "Overtime Status", "Number of Employees",
-                        legend_keys=["No", "Yes"])
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            with st.container(border=True):
+                ot_df = wb_df.copy()
+                ot_df["OverTime"] = ot_df["OverTime"].map({"No": "No OT", "Yes": "Rendered OT"})
+                ot_data = ot_df.groupby(["OverTime", "Attrition"]).size().reset_index(name="Count")
+                fig, ax = plt.subplots(figsize=FIGSIZE, facecolor=CHART_BG)
+                sns.barplot(data=ot_data, x="OverTime", y="Count", hue="Attrition", palette=PALETTE, ax=ax)
+                style_chart(ax, "Overtime vs Attrition", "Overtime Status", "Number of Employees", legend_keys=["No", "Yes"])
+                fig.tight_layout(pad=1.8)
+                st.pyplot(fig, use_container_width=True)
+                plt.close()
 
         with js_col3:
-            wlb_data = wb_df.groupby(["WorkLifeBalance", "Attrition"]).size().reset_index(name="Count")
-            fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
-            ax.set_facecolor("white")
-            sns.barplot(data=wlb_data, x="WorkLifeBalance", y="Count", hue="Attrition",
-                        palette=PALETTE, ax=ax)
-            style_chart(ax, "Work-Life Balance", "Balance Rating", "Number of Employees",
-                        legend_keys=["No", "Yes"])
-            ax.set_xticks([0, 1, 2, 3])
-            ax.set_xticklabels(RATING_LABELS)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            with st.container(border=True):
+                wlb_data = wb_df.groupby(["WorkLifeBalance", "Attrition"]).size().reset_index(name="Count")
+                fig, ax = plt.subplots(figsize=FIGSIZE, facecolor=CHART_BG)
+                sns.barplot(data=wlb_data, x="WorkLifeBalance", y="Count", hue="Attrition", palette=PALETTE, ax=ax)
+                style_chart(ax, "Work-Life Balance", "Balance Rating", "Number of Employees", legend_keys=["No", "Yes"])
+                ax.set_xticks([0, 1, 2, 3])
+                ax.set_xticklabels(RATING_LABELS)
+                fig.tight_layout(pad=1.8)
+                st.pyplot(fig, use_container_width=True)
+                plt.close()
 
     with tab_env:
         st.caption("How comfortable employees feel in their physical and social work environment, and whether commute distance plays a role.")
         env_col1, env_col2 = st.columns(2)
 
         with env_col1:
-            env_data = wb_df.groupby(["EnvironmentSatisfaction", "Attrition"]).size().reset_index(name="Count")
-            fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
-            ax.set_facecolor("white")
-            sns.barplot(data=env_data, x="EnvironmentSatisfaction", y="Count", hue="Attrition",
-                        palette=PALETTE, ax=ax)
-            style_chart(ax, "Environment Satisfaction", "Satisfaction Rating", "Number of Employees",
-                        legend_keys=["No", "Yes"])
-            ax.set_xticks([0, 1, 2, 3])
-            ax.set_xticklabels(RATING_LABELS)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            with st.container(border=True):
+                env_data = wb_df.groupby(["EnvironmentSatisfaction", "Attrition"]).size().reset_index(name="Count")
+                fig, ax = plt.subplots(figsize=FIGSIZE, facecolor=CHART_BG)
+                sns.barplot(data=env_data, x="EnvironmentSatisfaction", y="Count", hue="Attrition", palette=PALETTE, ax=ax)
+                style_chart(ax, "Environment Satisfaction", "Satisfaction Rating", "Number of Employees", legend_keys=["No", "Yes"])
+                ax.set_xticks([0, 1, 2, 3])
+                ax.set_xticklabels(RATING_LABELS)
+                fig.tight_layout(pad=1.8)
+                st.pyplot(fig, use_container_width=True)
+                plt.close()
 
         with env_col2:
-            bins = [0, 5, 10, 15, 20, 100]
-            labels_dist = ["0–5 km", "6–10 km", "11–15 km", "16–20 km", "20+ km"]
-            wb_df["DistanceBucket"] = pd.cut(wb_df["DistanceFromHome"], bins=bins, labels=labels_dist, right=True)
-            dist_data = wb_df.groupby(["DistanceBucket", "Attrition"], observed=True).size().reset_index(name="Count")
-            fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
-            ax.set_facecolor("white")
-            sns.barplot(data=dist_data, x="DistanceBucket", y="Count", hue="Attrition",
-                        palette=PALETTE, ax=ax)
-            style_chart(ax, "Distance From Home", "Commute Distance", "Number of Employees",
-                        legend_keys=["No", "Yes"])
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            with st.container(border=True):
+                bins = [0, 5, 10, 15, 20, 100]
+                labels_dist = ["0–5 km", "6–10 km", "11–15 km", "16–20 km", "20+ km"]
+                wb_df["DistanceBucket"] = pd.cut(wb_df["DistanceFromHome"], bins=bins, labels=labels_dist, right=True)
+                dist_data = wb_df.groupby(["DistanceBucket", "Attrition"], observed=True).size().reset_index(name="Count")
+                fig, ax = plt.subplots(figsize=FIGSIZE, facecolor=CHART_BG)
+                sns.barplot(data=dist_data, x="DistanceBucket", y="Count", hue="Attrition", palette=PALETTE, ax=ax)
+                style_chart(ax, "Distance From Home", "Commute Distance", "Number of Employees", legend_keys=["No", "Yes"])
+                fig.tight_layout(pad=1.8)
+                st.pyplot(fig, use_container_width=True)
+                plt.close()
 
     with tab_rel:
         st.caption("How employees feel about their relationships at work — with peers and managers — and how long they've been with their current manager.")
         rel_col1, rel_col2 = st.columns(2)
 
         with rel_col1:
-            rs_data = wb_df.groupby(["RelationshipSatisfaction", "Attrition"]).size().reset_index(name="Count")
-            fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
-            ax.set_facecolor("white")
-            sns.barplot(data=rs_data, x="RelationshipSatisfaction", y="Count", hue="Attrition",
-                        palette=PALETTE, ax=ax)
-            style_chart(ax, "Relationship Satisfaction", "Satisfaction Rating", "Number of Employees",
-                        legend_keys=["No", "Yes"])
-            ax.set_xticks([0, 1, 2, 3])
-            ax.set_xticklabels(RATING_LABELS)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            with st.container(border=True):
+                rs_data = wb_df.groupby(["RelationshipSatisfaction", "Attrition"]).size().reset_index(name="Count")
+                fig, ax = plt.subplots(figsize=FIGSIZE, facecolor=CHART_BG)
+                sns.barplot(data=rs_data, x="RelationshipSatisfaction", y="Count", hue="Attrition", palette=PALETTE, ax=ax)
+                style_chart(ax, "Relationship Satisfaction", "Satisfaction Rating", "Number of Employees", legend_keys=["No", "Yes"])
+                ax.set_xticks([0, 1, 2, 3])
+                ax.set_xticklabels(RATING_LABELS)
+                fig.tight_layout(pad=1.8)
+                st.pyplot(fig, use_container_width=True)
+                plt.close()
 
         with rel_col2:
-            mgr_avg = wb_df.groupby("Attrition")["YearsWithCurrManager"].mean().reset_index()
-            mgr_avg["Label"] = mgr_avg["Attrition"].map({"No": "Stayed", "Yes": "Left"})
-            fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
-            ax.set_facecolor("white")
-            bars = ax.bar(mgr_avg["Label"], mgr_avg["YearsWithCurrManager"],
-                          color=[PALETTE[v] for v in mgr_avg["Attrition"]], width=0.4)
-            for bar in bars:
-                ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
-                        f"{bar.get_height():.1f} yrs", ha="center", fontsize=10, fontweight="bold")
-            ax.set_title("Avg Years With Current Manager", fontsize=13, fontweight="bold", pad=12)
-            ax.set_xlabel("", fontsize=10)
-            ax.set_ylabel("Average Years", fontsize=10)
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            with st.container(border=True):
+                mgr_avg = wb_df.groupby("Attrition")["YearsWithCurrManager"].mean().reset_index()
+                mgr_avg["Label"] = mgr_avg["Attrition"].map({"No": "Stayed", "Yes": "Left"})
+                fig, ax = plt.subplots(figsize=FIGSIZE, facecolor=CHART_BG)
+                ax.set_facecolor("none")
+                bars = ax.bar(mgr_avg["Label"], mgr_avg["YearsWithCurrManager"],
+                              color=[PALETTE[v] for v in mgr_avg["Attrition"]], width=0.4)
+                for bar in bars:
+                    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
+                            f"{bar.get_height():.1f} yrs", ha="center", fontsize=10, fontweight="bold", color=FG)
+                ax.set_title("Avg Years With Current Manager", fontsize=13, fontweight="bold", pad=12, color=TITLE_FG)
+                ax.set_ylabel("Average Years", fontsize=10, color=FG)
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                ax.spines["left"].set_color(GRID_COLOR)
+                ax.spines["bottom"].set_color(GRID_COLOR)
+                ax.tick_params(colors=FG)
+                ax.grid(axis="y", color=GRID_COLOR, alpha=0.35)
+                ax.set_axisbelow(True)
+                fig.tight_layout(pad=1.8)
+                st.pyplot(fig, use_container_width=True)
+                plt.close()
 
         rel_col3, rel_col4 = st.columns(2)
 
         with rel_col3:
-            tenure_avg = wb_df.groupby("Attrition")["YearsAtCompany"].mean().reset_index()
-            tenure_avg["Label"] = tenure_avg["Attrition"].map({"No": "Stayed", "Yes": "Left"})
-            fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
-            ax.set_facecolor("white")
-            bars = ax.bar(tenure_avg["Label"], tenure_avg["YearsAtCompany"],
-                          color=[PALETTE[v] for v in tenure_avg["Attrition"]], width=0.4)
-            for bar in bars:
-                ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
-                        f"{bar.get_height():.1f} yrs", ha="center", fontsize=10, fontweight="bold")
-            ax.set_title("Avg Years At Company", fontsize=13, fontweight="bold", pad=12)
-            ax.set_xlabel("", fontsize=10)
-            ax.set_ylabel("Average Years", fontsize=10)
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            with st.container(border=True):
+                tenure_avg = wb_df.groupby("Attrition")["YearsAtCompany"].mean().reset_index()
+                tenure_avg["Label"] = tenure_avg["Attrition"].map({"No": "Stayed", "Yes": "Left"})
+                fig, ax = plt.subplots(figsize=FIGSIZE, facecolor=CHART_BG)
+                ax.set_facecolor("none")
+                bars = ax.bar(tenure_avg["Label"], tenure_avg["YearsAtCompany"],
+                              color=[PALETTE[v] for v in tenure_avg["Attrition"]], width=0.4)
+                for bar in bars:
+                    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
+                            f"{bar.get_height():.1f} yrs", ha="center", fontsize=10, fontweight="bold", color=FG)
+                ax.set_title("Avg Years At Company", fontsize=13, fontweight="bold", pad=12, color=TITLE_FG)
+                ax.set_ylabel("Average Years", fontsize=10, color=FG)
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                ax.spines["left"].set_color(GRID_COLOR)
+                ax.spines["bottom"].set_color(GRID_COLOR)
+                ax.tick_params(colors=FG)
+                ax.grid(axis="y", color=GRID_COLOR, alpha=0.35)
+                ax.set_axisbelow(True)
+                fig.tight_layout(pad=1.8)
+                st.pyplot(fig, use_container_width=True)
+                plt.close()
 
         with rel_col4:
-            # Line chart with bubble sizes — larger dot means more employees at that tenure year
-            mgr_line = wb_df.groupby("YearsWithCurrManager").agg(
-                AvgSat=("RelationshipSatisfaction", "mean"),
-                Count=("RelationshipSatisfaction", "count")
-            ).reset_index()
-
-            # Scale bubble size so the reader can see which data points are based on more employees
-            min_s, max_s = 40, 300
-            count_range = mgr_line["Count"].max() - mgr_line["Count"].min()
-            if count_range == 0:
-                mgr_line["BubbleSize"] = min_s
-            else:
-                mgr_line["BubbleSize"] = ((mgr_line["Count"] - mgr_line["Count"].min())
-                                           / count_range * (max_s - min_s) + min_s)
-
-            # Dynamic y-axis — don't start at 0 so small differences are visible
-            y_min = mgr_line["AvgSat"].min()
-            y_max = mgr_line["AvgSat"].max()
-            y_pad = max((y_max - y_min) * 0.4, 0.1)
-
-            fig, ax = plt.subplots(figsize=FIGSIZE, facecolor="white")
-            ax.set_facecolor("white")
-            ax.plot(mgr_line["YearsWithCurrManager"], mgr_line["AvgSat"],
-                    color="#5BA4A4", linewidth=2, zorder=1)
-            ax.scatter(mgr_line["YearsWithCurrManager"], mgr_line["AvgSat"],
-                       s=mgr_line["BubbleSize"], color="#5BA4A4", alpha=0.85, zorder=2)
-            ax.set_ylim(y_min - y_pad, y_max + y_pad)
-            ax.set_title("Satisfaction by Manager Tenure", fontsize=13, fontweight="bold", pad=12)
-            ax.set_xlabel("Years With Current Manager\n(Bubble size = number of employees)", fontsize=9, labelpad=8)
-            ax.set_ylabel("Avg Relationship Satisfaction", fontsize=10)
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-            fig.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            with st.container(border=True):
+                mgr_line = wb_df.groupby("YearsWithCurrManager").agg(
+                    AvgSat=("RelationshipSatisfaction", "mean"),
+                    Count=("RelationshipSatisfaction", "count")
+                ).reset_index()
+                mgr_line = mgr_line.dropna(subset=["AvgSat"])
+                if mgr_line.empty:
+                    st.info("No data available for this chart.")
+                else:
+                    min_s, max_s = 40, 300
+                    count_range = mgr_line["Count"].max() - mgr_line["Count"].min()
+                    mgr_line["BubbleSize"] = min_s if count_range == 0 else (
+                        (mgr_line["Count"] - mgr_line["Count"].min()) / count_range * (max_s - min_s) + min_s
+                    )
+                    y_min = mgr_line["AvgSat"].min()
+                    y_max = mgr_line["AvgSat"].max()
+                    y_pad = max((y_max - y_min) * 0.4, 0.1)
+                    fig, ax = plt.subplots(figsize=FIGSIZE, facecolor=CHART_BG)
+                    ax.set_facecolor("none")
+                    ax.plot(mgr_line["YearsWithCurrManager"], mgr_line["AvgSat"],
+                            color=PALETTE["No"], linewidth=2, zorder=1)
+                    ax.scatter(mgr_line["YearsWithCurrManager"], mgr_line["AvgSat"],
+                               s=mgr_line["BubbleSize"], color=PALETTE["No"], alpha=0.85, zorder=2)
+                    ax.set_ylim(y_min - y_pad, y_max + y_pad)
+                    ax.set_title("Satisfaction by Manager Tenure", fontsize=13, fontweight="bold", pad=12, color=TITLE_FG)
+                    ax.set_xlabel("Years With Current Manager\n(Bubble size = number of employees)", fontsize=9, labelpad=8, color=FG)
+                    ax.set_ylabel("Avg Relationship Satisfaction", fontsize=10, color=FG)
+                    ax.spines["top"].set_visible(False)
+                    ax.spines["right"].set_visible(False)
+                    ax.spines["left"].set_color(GRID_COLOR)
+                    ax.spines["bottom"].set_color(GRID_COLOR)
+                    ax.tick_params(colors=FG)
+                    ax.grid(axis="y", color=GRID_COLOR, alpha=0.35)
+                    ax.set_axisbelow(True)
+                    fig.tight_layout(pad=1.8)
+                    st.pyplot(fig, use_container_width=True)
+                    plt.close()
 
 elif app_feature == "Predictive Analytics":
     st.header("🔮 Machine Learning Predictive Analytics")
