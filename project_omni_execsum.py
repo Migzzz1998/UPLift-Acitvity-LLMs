@@ -73,7 +73,18 @@ def get_default_dataset():
 # =========================================================================
 
 with st.sidebar:
-    st.markdown("### 🏢 **Omni-Retention Engine**")
+    import base64
+    with open("static/logo.png", "rb") as f:
+        logo_b64 = base64.b64encode(f.read()).decode()
+    st.markdown(
+        f"""
+        <div style="display:flex; justify-content:center; padding: 8px 0 4px 0;">
+            <img src="data:image/png;base64,{logo_b64}"
+                 style="width:80px; height:80px; border-radius:50%; object-fit:cover;">
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.markdown("---")
     
     # 1. NAVIGATION HUB
@@ -1091,7 +1102,7 @@ elif app_feature == "Wellbeing/Performance":
     if sat_levels[selected_sat_label] is not None:
         wb_df = wb_df[wb_df["JobSatisfaction"] == sat_levels[selected_sat_label]]
 
-    st.markdown("---")
+    st.markdown("<div style='margin: 0.5rem 0;'></div>", unsafe_allow_html=True)
 
     # Soft, easy-on-the-eyes colors: teal for Stayed, coral for Left
     PALETTE = {"No": "#5BA4A4", "Yes": "#E07B6A"}
@@ -1154,7 +1165,7 @@ elif app_feature == "Wellbeing/Performance":
             progress_label=f"{avg_rel / 4:.0%} of maximum score"
         )
 
-    st.markdown("---")
+    st.markdown("<div style='margin: 0.5rem 0;'></div>", unsafe_allow_html=True)
 
     tab_job, tab_env, tab_rel = st.tabs(["💼 Job Satisfaction", "🏢 Environment Satisfaction", "🤝 Relationship Satisfaction"])
 
