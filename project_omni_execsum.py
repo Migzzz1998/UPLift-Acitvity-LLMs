@@ -533,6 +533,8 @@ elif app_feature == "Attrition Drivers":
                 "YearsInCurrentRole": "Years in Current Role",
                 "Attrition": "Resignation Status",
                 "Attrition_Reason": "Resignation Reason",
+                "Hire_Date": "Hire Date",
+                "Exit_Date": "Exit Date",
                 "Attrited_Employees": "Resigned Employees",
                 "Active_Employees": "Active Employees",
                 "Attrition_Rate": "Resignation Rate",
@@ -607,16 +609,114 @@ elif app_feature == "Attrition Drivers":
                         .replace({"": "Not Available", "nan": "Not Available", "None": "Not Available"})
                     )
 
+            # Date parsing is kept inside Attrition Drivers only so the other tabs remain untouched.
+            date_reference_columns = [col for col in ["Hire_Date", "Exit_Date"] if col in driver_df.columns]
+            for col in date_reference_columns:
+                driver_df[col] = pd.to_datetime(driver_df[col], errors="coerce")
+
             if missing_driver_columns:
                 st.info("Missing optional driver columns: " + ", ".join(missing_driver_columns))
 
             filtered_df = driver_df.copy()
+            date_filter_summary = "All available dates"
+            date_filter_basis_summary = ""
 
             with st.expander("Filter resignation driver data", expanded=False):
                 st.markdown(
-                    "<div class='section-note'>Leave a multiselect blank to include all values for that field. Use the sliders only when you want to narrow the range.</div>",
+                    "<div class='section-note'>Leave a multiselect blank to include all values for that field. Use the date range when you want the KPIs, charts, tables, and exports to follow a specific time window.</div>",
                     unsafe_allow_html=True,
                 )
+
+                date_filter_options = []
+                if "Hire_Date" in filtered_df.columns and filtered_df["Hire_Date"].notna().any():
+                    date_filter_options.append("Hire Date")
+                if "Exit_Date" in filtered_df.columns and filtered_df["Exit_Date"].notna().any():
+                    date_filter_options.append("Exit Date / Resignation Date")
+                if all(col in filtered_df.columns for col in ["Hire_Date", "Exit_Date"]) and filtered_df["Hire_Date"].notna().any():
+                    date_filter_options.insert(0, "Employment Activity Window")
+
+                if date_filter_options:
+                    selected_date_basis = st.selectbox(
+                        "Date Filter Basis",
+                        date_filter_options,
+                        index=0,
+                        help=(
+                            "Employment Activity Window includes employees active at any time in the selected range "
+                            "and counts resignations only when the exit date falls in that range."
+                        ),
+                    )
+
+                    if selected_date_basis == "Employment Activity Window":
+                        date_bounds = pd.concat([
+                            filtered_df["Hire_Date"].dropna(),
+                            filtered_df["Exit_Date"].dropna()
+                        ])
+                    elif selected_date_basis == "Hire Date":
+                        date_bounds = filtered_df["Hire_Date"].dropna()
+                    else:
+                        date_bounds = filtered_df["Exit_Date"].dropna()
+
+                    if not date_bounds.empty:
+                        min_available_date = date_bounds.min().date()
+                        max_available_date = date_bounds.max().date()
+                        selected_date_range = st.date_input(
+                            "Date Range",
+                            value=(min_available_date, max_available_date),
+                            min_value=min_available_date,
+                            max_value=max_available_date,
+                            key="attrition_driver_date_range",
+                        )
+
+                        if isinstance(selected_date_range, tuple) and len(selected_date_range) == 2:
+                            selected_start_date, selected_end_date = selected_date_range
+                            range_start = pd.Timestamp(selected_start_date)
+                            range_end = pd.Timestamp(selected_end_date) + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
+
+                            if range_start > range_end:
+                                st.warning("Start date cannot be later than end date. The date filter was not applied.")
+                            else:
+                                if selected_date_basis == "Employment Activity Window":
+                                    active_window_mask = (
+                                        filtered_df["Hire_Date"].notna()
+                                        & (filtered_df["Hire_Date"] <= range_end)
+                                        & (
+                                            filtered_df["Exit_Date"].isna()
+                                            | (filtered_df["Exit_Date"] >= range_start)
+                                        )
+                                    )
+                                    filtered_df = filtered_df.loc[active_window_mask].copy()
+
+                                    exit_in_selected_window = (
+                                        filtered_df["Exit_Date"].notna()
+                                        & filtered_df["Exit_Date"].between(range_start, range_end, inclusive="both")
+                                    )
+                                    attrition_without_exit_date = (
+                                        filtered_df["Exit_Date"].isna()
+                                        & (filtered_df["Attrition"] == "Yes")
+                                    )
+                                    filtered_df["Attrition_Flag"] = np.where(
+                                        (filtered_df["Attrition"] == "Yes") & (exit_in_selected_window | attrition_without_exit_date),
+                                        1,
+                                        0
+                                    ).astype(int)
+                                    filtered_df["Attrition"] = np.where(filtered_df["Attrition_Flag"].eq(1), "Yes", "No")
+                                    date_filter_basis_summary = "Employment Activity Window"
+                                elif selected_date_basis == "Hire Date":
+                                    filtered_df = filtered_df.loc[
+                                        filtered_df["Hire_Date"].between(range_start, range_end, inclusive="both")
+                                    ].copy()
+                                    date_filter_basis_summary = "Hire Date"
+                                else:
+                                    filtered_df = filtered_df.loc[
+                                        filtered_df["Exit_Date"].between(range_start, range_end, inclusive="both")
+                                    ].copy()
+                                    date_filter_basis_summary = "Exit Date / Resignation Date"
+
+                                date_filter_summary = f"{date_filter_basis_summary}: {range_start:%Y-%m-%d} to {range_end:%Y-%m-%d}"
+                        else:
+                            st.info("Select both a start and end date to apply the date range filter.")
+                else:
+                    st.info("No valid Hire_Date or Exit_Date values were found for date filtering.")
 
                 selected_company = []
                 if "Company" in filtered_df.columns:
@@ -712,6 +812,8 @@ elif app_feature == "Attrition Drivers":
                         selected_reason = st.multiselect("Resignation Reason", reason_options, default=[], placeholder="All reasons")
                         if selected_reason:
                             filtered_df = filtered_df[filtered_df["Attrition_Reason"].isin(selected_reason)]
+
+            st.caption(f"Current date scope: {date_filter_summary}")
 
             attrited_df = filtered_df[filtered_df["Attrition"] == "Yes"].copy()
             total_filtered = len(filtered_df)
@@ -1052,7 +1154,8 @@ elif app_feature == "Attrition Drivers":
                     with st.container(border=True):
                         st.subheader("Filtered Employee Records")
                         st.caption("This table and export follow the current filter selection in this Resignation Drivers page.")
-                        detail_columns = ["Attrition"] + available_driver_columns
+                        date_detail_columns = [col for col in ["Hire_Date", "Exit_Date"] if col in filtered_df.columns]
+                        detail_columns = ["Attrition"] + available_driver_columns + date_detail_columns
                         if "Company" in filtered_df.columns:
                             detail_columns = ["Company"] + detail_columns
                         if "EmployeeNumber" in filtered_df.columns:
@@ -1061,6 +1164,9 @@ elif app_feature == "Attrition Drivers":
 
                         export_filtered_df = filtered_df[detail_columns].copy()
                         display_records = export_filtered_df.rename(columns={col: pretty_label(col) for col in export_filtered_df.columns})
+                        for col in ["Hire Date", "Exit Date"]:
+                            if col in display_records.columns:
+                                display_records[col] = pd.to_datetime(display_records[col], errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
 
                         st.download_button(
                             label="Download Filtered Records CSV",
