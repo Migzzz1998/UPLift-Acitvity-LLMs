@@ -112,15 +112,16 @@ p, label, .stMarkdown p { color: var(--text-muted) !important; }
 /* ── Divider ── */
 hr { border-color: rgba(255,255,255,0.07) !important; }
 
-/* ── DataFrames ── */
+/* ── DataFrames — only style the outer wrapper, NOT the iframe internals ── */
 [data-testid="stDataFrame"] {
-    background: var(--bg-card) !important;
-    border: 1px solid var(--border) !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
     border-radius: 12px !important;
+    overflow: hidden !important;
 }
-[data-testid="stDataFrame"] * {
-    background-color: var(--bg-card) !important;
-    color: var(--text-primary) !important;
+/* Target the inner glide-data-grid canvas wrapper background only */
+[data-testid="stDataFrame"] > div {
+    background: #111827 !important;
+    border-radius: 12px !important;
 }
 
 /* ── Selectbox / Inputs ── */
@@ -489,7 +490,11 @@ with st.sidebar:
         ]
 
     st.divider()
-    st.markdown("""### Model Performance
+    st.markdown("""
+    <div class='section-note'>
+        <b>Analytics</b><br>
+        Explore and dive in the dataset
+    </div>
     """.format(auc=model_metrics["auc"]), unsafe_allow_html=True)
     st.caption(f"Dataset: {len(filtered_df):,} of {len(df):,} records")
 
@@ -608,13 +613,43 @@ if page == "📊 Dashboard":
 
     # ── Data Snapshot ──
     with st.expander("📋 Data Snapshot (first 20 rows)", expanded=False):
-        st.dataframe(
-            filtered_df.head(20).style.map(
-                lambda v: "color: #F87171" if v == "Yes" else ("color: #2DD4BF" if v == "No" else ""),
-                subset=["Attrition"] if "Attrition" in filtered_df.columns else []
-            ),
-            use_container_width=True
-        )
+        display_df = filtered_df.head(20).copy()
+
+        def style_attrition(val):
+            if val == "Yes":
+                return "background-color: rgba(248,113,113,0.15); color: #F87171; font-weight:600"
+            elif val == "No":
+                return "background-color: rgba(45,212,191,0.12); color: #2DD4BF; font-weight:600"
+            return ""
+
+        styled = display_df.style.set_properties(**{
+            "background-color": "#111827",
+            "color": "#F0F4FF",
+            "border-color": "rgba(255,255,255,0.06)",
+            "font-size": "0.85rem",
+        }).set_table_styles([
+            {"selector": "th", "props": [
+                ("background-color", "#1a2234"),
+                ("color", "#8B95A8"),
+                ("font-size", "0.78rem"),
+                ("text-transform", "uppercase"),
+                ("letter-spacing", "0.06em"),
+                ("border-bottom", "1px solid rgba(255,255,255,0.08)"),
+                ("padding", "8px 12px"),
+            ]},
+            {"selector": "td", "props": [
+                ("padding", "7px 12px"),
+                ("border-bottom", "1px solid rgba(255,255,255,0.04)"),
+            ]},
+            {"selector": "tr:hover td", "props": [
+                ("background-color", "rgba(96,165,250,0.05)"),
+            ]},
+        ])
+
+        if "Attrition" in display_df.columns:
+            styled = styled.map(style_attrition, subset=["Attrition"])
+
+        st.dataframe(styled, use_container_width=True, height=420)
 
     # ── Workforce Composition ──
     st.subheader("Workforce Composition")
