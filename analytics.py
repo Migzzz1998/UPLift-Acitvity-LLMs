@@ -570,7 +570,7 @@ def run_model_comparison(df_hash):
         "Random Forest (Default)":      (RandomForestClassifier(n_estimators=150, max_depth=8, random_state=42, n_jobs=-1),                X_tr,    X_te,    0.5),
         "Gradient Boosting":            (GradientBoostingClassifier(n_estimators=150, learning_rate=0.08, max_depth=4, random_state=42),   X_tr,    X_te,    0.5),
         "Extra Trees":                  (ExtraTreesClassifier(n_estimators=200, max_depth=10, class_weight="balanced", random_state=42, n_jobs=-1), X_tr, X_te, 0.5),
-        "AdaBoost":                     (AdaBoostClassifier(n_estimators=100, learning_rate=0.5, random_state=42, algorithm="SAMME"),      X_tr,    X_te,    0.5),
+        "AdaBoost":                     (AdaBoostClassifier(n_estimators=100, learning_rate=0.5, random_state=42),      X_tr,    X_te,    0.5),
         "Decision Tree":                (DecisionTreeClassifier(max_depth=6, class_weight="balanced", random_state=42),                    X_tr,    X_te,    0.5),
         "Logistic Regression":          (LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42),                      X_tr_sc, X_te_sc, 0.5),
         "SVM (RBF Kernel)":             (SVC(kernel="rbf", class_weight="balanced", probability=True, random_state=42),                   X_tr_sc, X_te_sc, 0.5),
@@ -659,7 +659,7 @@ MODEL_CATALOGUE = {
     },
     "🔥 AdaBoost": {
         "clf": lambda: AdaBoostClassifier(n_estimators=100, learning_rate=0.5,
-                        random_state=42, algorithm="SAMME"),
+                        random_state=42),
         "use_scale": False, "tune_thresh": False,
         "tag": "BOOSTED",
         "tag_color": "#F472B6",
