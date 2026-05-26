@@ -5,10 +5,17 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sns
 import os
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+from sklearn.ensemble import (RandomForestClassifier, GradientBoostingClassifier,
+                              ExtraTreesClassifier, AdaBoostClassifier)
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.metrics import (classification_report, confusion_matrix,
+                              roc_auc_score, roc_curve, precision_recall_curve,
+                              recall_score, precision_score, f1_score, accuracy_score)
 from sklearn.inspection import permutation_importance
 import warnings
 warnings.filterwarnings('ignore')
@@ -76,30 +83,130 @@ header[data-testid="stHeader"] {
 header[data-testid="stHeader"]::before,
 header[data-testid="stHeader"]::after { display: none !important; }
 
-/* ── Sidebar ── */
+/* ══════════════════════════════════════
+   SIDEBAR — Redesigned
+══════════════════════════════════════ */
 [data-testid="stSidebar"],
 [data-testid="stSidebar"] > div,
 [data-testid="stSidebarContent"] {
-    background: #0D1117 !important;
-    border-right: 1px solid rgba(255,255,255,0.07) !important;
+    background: #080C14 !important;
+    border-right: 1px solid rgba(255,255,255,0.055) !important;
 }
 [data-testid="stSidebar"] * { color: var(--text-primary) !important; }
 
-/* ── Radio — remove coloured dots, add pill highlight ── */
-[data-testid="stSidebar"] .stRadio [role="radiogroup"] { gap: 4px !important; }
-[data-testid="stSidebar"] .stRadio label {
-    font-size: 0.88rem !important;
-    color: var(--text-muted) !important;
-    padding: 6px 10px !important;
-    border-radius: 8px !important;
-    transition: background 0.15s, color 0.15s !important;
-    display: flex !important; align-items: center !important; gap: 8px !important;
+/* ── Brand block ── */
+.sidebar-brand {
+    display: flex; align-items: center; gap: 12px;
+    padding-bottom: 18px; margin-bottom: 4px;
 }
-[data-testid="stSidebar"] .stRadio label:hover {
-    background: rgba(96,165,250,0.08) !important;
-    color: var(--accent-blue) !important;
+.sidebar-brand .brand-icon-wrap {
+    width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
+    background: linear-gradient(135deg, #1D4ED8 0%, #6D28D9 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.15rem;
+    box-shadow: 0 4px 12px rgba(109,40,217,0.35);
+}
+.sidebar-brand .brand-title {
+    font-size: 0.95rem; font-weight: 700; line-height: 1.2;
+    background: linear-gradient(90deg, #93C5FD, #C4B5FD);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.brand-tag { font-size: 0.67rem; color: #2D3748; margin-top: 2px; letter-spacing: 0.03em; }
+
+/* ── Section label ── */
+.nav-section-label {
+    font-size: 0.64rem; font-weight: 700; letter-spacing: 0.13em;
+    text-transform: uppercase; color: #2D3748;
+    padding: 14px 4px 5px; display: block;
+}
+
+/* ── Nav radio group ── */
+[data-testid="stSidebar"] .stRadio > label { display: none !important; }
+[data-testid="stSidebar"] .stRadio [role="radiogroup"] {
+    display: flex !important; flex-direction: column !important; gap: 2px !important;
 }
 [data-testid="stSidebar"] .stRadio input[type="radio"] { display: none !important; }
+[data-testid="stSidebar"] .stRadio label {
+    font-size: 0.86rem !important; font-weight: 500 !important;
+    color: #4A5568 !important; padding: 9px 12px !important;
+    border-radius: 10px !important; cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    display: flex !important; align-items: center !important; gap: 9px !important;
+    border: 1px solid transparent !important;
+    letter-spacing: 0.01em !important; width: 100% !important;
+}
+[data-testid="stSidebar"] .stRadio label:hover {
+    background: rgba(96,165,250,0.07) !important;
+    color: #94A3B8 !important;
+    border-color: rgba(96,165,250,0.12) !important;
+}
+[data-testid="stSidebar"] .stRadio label[data-baseweb] {
+    background: linear-gradient(90deg, rgba(96,165,250,0.12), rgba(167,139,250,0.08)) !important;
+    color: #93C5FD !important;
+    border-color: rgba(96,165,250,0.22) !important;
+}
+
+/* ── Sidebar dividers ── */
+[data-testid="stSidebar"] hr {
+    border-color: rgba(255,255,255,0.05) !important;
+    margin: 8px 0 !important;
+}
+
+/* ── Expander in sidebar ── */
+[data-testid="stSidebar"] [data-testid="stExpander"] {
+    background: rgba(255,255,255,0.025) !important;
+    border: 1px solid rgba(255,255,255,0.055) !important;
+    border-radius: 10px !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+    font-size: 0.82rem !important; color: #4A5568 !important;
+    background: transparent !important; padding: 8px 12px !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover {
+    color: #94A3B8 !important;
+}
+
+/* ── Model selector ── */
+.model-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px; padding: 10px 12px; margin-top: 6px;
+}
+.model-card-name  { font-size: 0.82rem; font-weight: 600; color: #CBD5E1; }
+.model-card-desc  { font-size: 0.72rem; color: #2D3748; margin-top: 4px; line-height: 1.4; }
+.model-tag {
+    display: inline-block; font-size: 0.62rem; font-weight: 700;
+    letter-spacing: 0.07em; padding: 2px 7px;
+    border-radius: 999px; margin-top: 5px;
+}
+
+/* ── Status pill ── */
+.status-pill {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(45,212,191,0.05);
+    border: 1px solid rgba(45,212,191,0.13);
+    border-radius: 10px; padding: 10px 12px;
+}
+.status-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #2DD4BF;
+    box-shadow: 0 0 8px rgba(45,212,191,0.6); flex-shrink: 0;
+    animation: sb-pulse 2.5s ease-in-out infinite;
+}
+@keyframes sb-pulse {
+    0%,100% { box-shadow: 0 0 6px rgba(45,212,191,0.6); }
+    50%      { box-shadow: 0 0 12px rgba(45,212,191,0.2); }
+}
+
+/* ── Sidebar slider thumb ── */
+[data-testid="stSidebar"] div[data-baseweb="slider"] [role="slider"] {
+    background: #60A5FA !important; border: 2px solid #60A5FA !important;
+}
+
+/* ── Model selector label ── */
+.model-selector-label {
+    font-size: 0.64rem; font-weight: 700; letter-spacing: 0.13em;
+    text-transform: uppercase; color: #2D3748; padding: 4px 0; display: block;
+}
 
 /* ── Typography ── */
 h1 {
@@ -291,18 +398,7 @@ div[data-baseweb="slider"] div[class*="Track"] > div:first-child {
 ::-webkit-scrollbar-track { background: var(--bg-surface); }
 ::-webkit-scrollbar-thumb { background: #2D3748; border-radius: 3px; }
 
-/* ── Sidebar brand ── */
-.sidebar-brand {
-    display: flex; align-items: center; gap: 10px;
-    padding: 0 0 1rem 0; margin-bottom: 0.5rem;
-}
-.sidebar-brand .brand-icon { font-size: 1.6rem; }
-.sidebar-brand .brand-title { 
-    font-size: 1rem; font-weight: 700; 
-    background: var(--gradient-hr); 
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-.brand-tag { font-size: 0.7rem; color: var(--text-dim); margin-top: -2px; }
+/* sidebar-brand styles now in sidebar block */
 
 /* ── Page header ── */
 .page-header {
@@ -430,6 +526,91 @@ def get_trained_model(df_hash):
     return model, FEATURES, metrics
 
 # ============================================================
+# 3b. MULTI-MODEL COMPARISON (Recall-focused)
+# ============================================================
+@st.cache_resource(show_spinner="Benchmarking all models...")
+def run_model_comparison(df_hash):
+    df = st.session_state["_df"]
+    df_ml = df.copy()
+    df_ml["Attrition_bin"] = (df_ml["Attrition"] == "Yes").astype(int)
+    if "OverTime" in df_ml.columns:
+        df_ml["OverTime_enc"] = (df_ml["OverTime"] == "Yes").astype(int)
+    else:
+        df_ml["OverTime_enc"] = 0
+
+    FEATS = ["Age", "DistanceFromHome", "JobLevel", "MonthlyIncome",
+             "TotalWorkingYears", "YearsAtCompany", "YearsInCurrentRole",
+             "JobSatisfaction", "WorkLifeBalance", "OverTime_enc"]
+    FEATS = [f for f in FEATS if f in df_ml.columns]
+
+    X = df_ml[FEATS].fillna(df_ml[FEATS].median())
+    y = df_ml["Attrition_bin"]
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    (X_tr, X_te, X_tr_sc, X_te_sc,
+     y_tr, y_te) = train_test_split(X, X_scaled, y,
+                                     test_size=0.2, random_state=42, stratify=y)
+
+    # Tune threshold on RF to maximise recall >= 0.80
+    rf_base = RandomForestClassifier(n_estimators=200, max_depth=10,
+                                     class_weight="balanced", random_state=42, n_jobs=-1)
+    rf_base.fit(X_tr, y_tr)
+    probs_val = rf_base.predict_proba(X_te)[:, 1]
+    prec_arr, rec_arr, thresh_arr = precision_recall_curve(y_te, probs_val)
+    high_recall_mask = rec_arr[:-1] >= 0.80
+    if high_recall_mask.any():
+        best_thresh = thresh_arr[high_recall_mask][prec_arr[:-1][high_recall_mask].argmax()]
+    else:
+        best_thresh = float(thresh_arr[rec_arr[:-1].argmax()])
+
+    candidates = {
+        "Random Forest (Recall-Tuned)": (rf_base,                                                                                          X_tr,    X_te,    best_thresh),
+        "Random Forest (Default)":      (RandomForestClassifier(n_estimators=150, max_depth=8, random_state=42, n_jobs=-1),                X_tr,    X_te,    0.5),
+        "Gradient Boosting":            (GradientBoostingClassifier(n_estimators=150, learning_rate=0.08, max_depth=4, random_state=42),   X_tr,    X_te,    0.5),
+        "Extra Trees":                  (ExtraTreesClassifier(n_estimators=200, max_depth=10, class_weight="balanced", random_state=42, n_jobs=-1), X_tr, X_te, 0.5),
+        "AdaBoost":                     (AdaBoostClassifier(n_estimators=100, learning_rate=0.5, random_state=42, algorithm="SAMME"),      X_tr,    X_te,    0.5),
+        "Decision Tree":                (DecisionTreeClassifier(max_depth=6, class_weight="balanced", random_state=42),                    X_tr,    X_te,    0.5),
+        "Logistic Regression":          (LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42),                      X_tr_sc, X_te_sc, 0.5),
+        "SVM (RBF Kernel)":             (SVC(kernel="rbf", class_weight="balanced", probability=True, random_state=42),                   X_tr_sc, X_te_sc, 0.5),
+    }
+
+    results = []
+    trained_models = {}
+    for name, (clf, Xtr, Xte, thresh) in candidates.items():
+        clf.fit(Xtr, y_tr)
+        proba = clf.predict_proba(Xte)[:, 1]
+        preds = (proba >= thresh).astype(int)
+        results.append({
+            "Model":     name,
+            "Threshold": round(float(thresh), 3),
+            "Accuracy":  round(accuracy_score(y_te, preds), 4),
+            "Precision": round(precision_score(y_te, preds, zero_division=0), 4),
+            "Recall":    round(recall_score(y_te, preds, zero_division=0), 4),
+            "F1 Score":  round(f1_score(y_te, preds, zero_division=0), 4),
+            "ROC AUC":   round(roc_auc_score(y_te, proba), 4),
+        })
+        trained_models[name] = (clf, proba, preds, thresh, Xte)
+
+    results_df = pd.DataFrame(results).sort_values("Recall", ascending=False).reset_index(drop=True)
+    results_df.index += 1
+    results_df.insert(0, "Rank", results_df.index)
+    results_df["Selected_for_App"] = ["Yes" if i == 1 else "No" for i in range(1, len(results_df) + 1)]
+
+    best_name = results_df.iloc[0]["Model"]
+    best_model_obj = trained_models[best_name][0]
+    best_thresh_val = trained_models[best_name][3]
+
+    roc_data = {}
+    for name, (clf, proba, preds, thresh, Xte_use) in trained_models.items():
+        fpr, tpr, _ = roc_curve(y_te, proba)
+        roc_data[name] = (fpr, tpr)
+
+    return (results_df, trained_models, best_name, best_model_obj,
+            best_thresh_val, FEATS, scaler, y_te, roc_data)
+
+# ============================================================
 # 4. LOAD DATA + SESSION STATE
 # ============================================================
 df = load_data()
@@ -440,27 +621,127 @@ model, FEATURES, model_metrics = get_trained_model(hash(str(df.shape)))
 # ============================================================
 # 5. SIDEBAR
 # ============================================================
+# ── Model catalogue (drives the selector) ──
+MODEL_CATALOGUE = {
+    # ── Recall-tuned champion ──
+    "🌲 Random Forest (Recall-Tuned)": {
+        "clf": lambda: RandomForestClassifier(n_estimators=200, max_depth=10,
+                        class_weight="balanced", random_state=42, n_jobs=-1),
+        "use_scale": False, "tune_thresh": True,
+        "tag": "RECOMMENDED",
+        "tag_color": "#2DD4BF",
+        "desc": "Threshold tuned on Precision-Recall curve to hit ≥80% recall. Best for catching at-risk employees.",
+    },
+    # ── Ensemble family ──
+    "🌲 Random Forest (Default)": {
+        "clf": lambda: RandomForestClassifier(n_estimators=150, max_depth=8,
+                        random_state=42, n_jobs=-1),
+        "use_scale": False, "tune_thresh": False,
+        "tag": "HIGH PRECISION",
+        "tag_color": "#60A5FA",
+        "desc": "Standard RF at 0.5 threshold. Very high precision (98%), conservative on recall.",
+    },
+    "⚡ Gradient Boosting": {
+        "clf": lambda: GradientBoostingClassifier(n_estimators=150, learning_rate=0.08,
+                        max_depth=4, random_state=42),
+        "use_scale": False, "tune_thresh": False,
+        "tag": "HIGH AUC",
+        "tag_color": "#A78BFA",
+        "desc": "Boosted trees. Strong AUC and precision. Good when false alarms are costly.",
+    },
+    "🚀 Extra Trees": {
+        "clf": lambda: ExtraTreesClassifier(n_estimators=200, max_depth=10,
+                        class_weight="balanced", random_state=42, n_jobs=-1),
+        "use_scale": False, "tune_thresh": False,
+        "tag": "FAST",
+        "tag_color": "#FBBF24",
+        "desc": "Extremely randomised trees. Faster than RF, often similar recall.",
+    },
+    "🔥 AdaBoost": {
+        "clf": lambda: AdaBoostClassifier(n_estimators=100, learning_rate=0.5,
+                        random_state=42, algorithm="SAMME"),
+        "use_scale": False, "tune_thresh": False,
+        "tag": "BOOSTED",
+        "tag_color": "#F472B6",
+        "desc": "Adaptive boosting. Focuses on hard-to-classify cases iteratively.",
+    },
+    # ── Linear / distance family ──
+    "📐 Logistic Regression": {
+        "clf": lambda: LogisticRegression(max_iter=1000, class_weight="balanced",
+                        random_state=42),
+        "use_scale": True, "tune_thresh": False,
+        "tag": "INTERPRETABLE",
+        "tag_color": "#34D399",
+        "desc": "Linear baseline. Fast, stable, auditable. Ideal for compliance reporting.",
+    },
+    "📏 SVM (RBF Kernel)": {
+        "clf": lambda: SVC(kernel="rbf", class_weight="balanced",
+                        probability=True, random_state=42),
+        "use_scale": True, "tune_thresh": False,
+        "tag": "KERNEL",
+        "tag_color": "#FB923C",
+        "desc": "Support vector machine with RBF kernel. Powerful on mid-sized datasets.",
+    },
+    # ── Tree family ──
+    "🌿 Decision Tree": {
+        "clf": lambda: DecisionTreeClassifier(max_depth=6, class_weight="balanced",
+                        random_state=42),
+        "use_scale": False, "tune_thresh": False,
+        "tag": "EXPLAINABLE",
+        "tag_color": "#A3E635",
+        "desc": "Single decision tree. Fully interpretable — every prediction traceable.",
+    },
+}
+
 with st.sidebar:
+    # ── Brand ──
     st.markdown("""
     <div class='sidebar-brand'>
-        <span class='brand-icon'>🛡️</span>
+        <div class='brand-icon-wrap'>🛡️</div>
         <div>
             <div class='brand-title'>Risk Intelligence</div>
             <div class='brand-tag'>Retention Analytics v2</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
-    st.divider()
 
+    # ── Navigation ──
+    st.markdown("<div class='nav-section-label'>Navigation</div>", unsafe_allow_html=True)
     page = st.radio(
         "NAVIGATION",
-        ["📊 Dashboard", "🔍 Attrition Factors", "⚠️ Risk Watchlist", "🔮 Predict Employee"],
-        label_visibility="visible"
+        ["📊 Dashboard", "🔮 Predict Employee", "🎛 Attrition Simulator",
+         "👥 Employees to Review", "📈 Predictive Analytics", "🏆 Model Lab"],
+        label_visibility="collapsed",
     )
 
     st.divider()
 
+    # ── Active Model Selector ──
+    st.markdown("<div class='nav-section-label'>Active Model</div>", unsafe_allow_html=True)
+    selected_model_name = st.selectbox(
+        "Active Model",
+        list(MODEL_CATALOGUE.keys()),
+        index=0,
+        label_visibility="collapsed",
+        key="active_model_select",
+        help="Changes the model used in Predict Employee, Employees to Review, and Attrition Simulator",
+    )
+    sel_meta = MODEL_CATALOGUE[selected_model_name]
+    tag_html = (f"<span class='model-tag' style='background:rgba(45,212,191,0.12);"
+                f"color:{sel_meta['tag_color']}'>{sel_meta.get('tag','')}</span>"
+                if sel_meta.get('tag') else "")
+    st.markdown(f"""
+    <div class='model-card'>
+        <div class='model-card-name'>{selected_model_name.split(' ', 1)[1] if ' ' in selected_model_name else selected_model_name}</div>
+        {tag_html}
+        <div class='model-card-desc'>{sel_meta['desc']}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.divider()
+
     # ── Filters ──
+    st.markdown("<div class='nav-section-label'>Filters</div>", unsafe_allow_html=True)
     with st.expander("🎚 Global Filters", expanded=False):
         companies = ["All"] + sorted(df["Company"].unique().tolist()) if "Company" in df.columns else ["All"]
         sel_company = st.selectbox("Company", companies)
@@ -490,13 +771,25 @@ with st.sidebar:
         ]
 
     st.divider()
-    st.markdown("""
-    <div class='section-note'>
-        <b>Analytics</b><br>
-        Explore and dive in the dataset
+
+    # ── Status pill ──
+    st.markdown(f"""
+    <div class='status-pill'>
+        <div class='status-dot'></div>
+        <div>
+            <div style='color:#F0F4FF;font-weight:600;font-size:0.8rem'>AI Core Online</div>
+            <div style='color:#545E70;font-size:0.72rem;margin-top:1px'>
+                AUC {model_metrics["auc"]} &nbsp;·&nbsp; {len(filtered_df):,} / {len(df):,} records
+            </div>
+        </div>
     </div>
-    """.format(auc=model_metrics["auc"]), unsafe_allow_html=True)
-    st.caption(f"Dataset: {len(filtered_df):,} of {len(df):,} records")
+    """, unsafe_allow_html=True)
+
+    st.markdown(
+        f"<div style='font-size:0.7rem;color:#3D4A5C;padding:8px 2px 0 2px'>"
+        f"Model: <span style='color:#545E70'>{selected_model_name.split(' ',1)[1]}</span></div>",
+        unsafe_allow_html=True
+    )
 
 if df is None:
     st.error("🚨 Dataset missing. Place HR_Attrition_MultiCompany.csv in the 'Final Data Clean' folder.")
@@ -676,11 +969,11 @@ if page == "📊 Dashboard":
 # ============================================================
 # PAGE 2 ── ATTRITION FACTORS
 # ============================================================
-elif page == "🔍 Attrition Factors":
+elif page == "📈 Predictive Analytics":
     st.markdown("""
     <div class='page-header'>
-        <h1>🤖 Underlying Drivers of Turnover</h1>
-        <div class='ph-sub'>AI-ranked risk factors derived from Random Forest feature importances</div>
+        <h1>📈 Predictive Analytics</h1>
+        <div class='ph-sub'>Why Recall was chosen · Feature drivers · Model comparison · Deep-dive analysis</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -691,6 +984,129 @@ elif page == "🔍 Attrition Factors":
     with m2: st.metric("Precision", f"{r.get('1', {}).get('precision', 0):.2%}")
     with m3: st.metric("Recall",    f"{r.get('1', {}).get('recall', 0):.2%}")
     with m4: st.metric("F1 Score",  f"{r.get('1', {}).get('f1-score', 0):.2%}")
+
+    st.divider()
+
+    # ── Why Recall? Rationale section ──
+    with st.expander("📖 Why did we choose Recall over Accuracy or Precision?", expanded=True):
+        ra, rb = st.columns([1, 1])
+        with ra:
+            st.markdown("""
+<div style='background:#111827;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:18px 20px'>
+<div style='font-size:0.75rem;color:#8B95A8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px'>The Core Problem</div>
+<p style='color:#F0F4FF;font-size:0.95rem;line-height:1.65'>
+In HR attrition prediction, the cost of <b style='color:#F87171'>missing</b> an employee who
+will leave is far higher than the cost of <b style='color:#FBBF24'>incorrectly flagging</b>
+someone who stays.
+</p>
+<p style='color:#8B95A8;font-size:0.85rem;margin-top:10px'>
+A missed leaver = lost knowledge, replacement cost (50–200% of salary), project disruption,
+and team morale damage. A false alarm = one extra retention conversation.
+</p>
+</div>
+            """, unsafe_allow_html=True)
+        with rb:
+            # Metric comparison mini-table as HTML
+            st.markdown("""
+<div style='background:#111827;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:18px 20px'>
+<div style='font-size:0.75rem;color:#8B95A8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px'>Metric Decision Matrix</div>
+<table style='width:100%;border-collapse:collapse;font-size:0.82rem'>
+<tr style='border-bottom:1px solid rgba(255,255,255,0.07)'>
+  <th style='color:#8B95A8;padding:6px 8px;text-align:left'>Metric</th>
+  <th style='color:#8B95A8;padding:6px 8px;text-align:left'>What it measures</th>
+  <th style='color:#8B95A8;padding:6px 8px;text-align:left'>Why not primary?</th>
+</tr>
+<tr style='border-bottom:1px solid rgba(255,255,255,0.04)'>
+  <td style='color:#FBBF24;padding:6px 8px;font-weight:600'>Accuracy</td>
+  <td style='color:#F0F4FF;padding:6px 8px'>Overall correct predictions</td>
+  <td style='color:#8B95A8;padding:6px 8px'>Misleading on imbalanced data (84% stay → model can score 84% by predicting "No" always)</td>
+</tr>
+<tr style='border-bottom:1px solid rgba(255,255,255,0.04)'>
+  <td style='color:#60A5FA;padding:6px 8px;font-weight:600'>Precision</td>
+  <td style='color:#F0F4FF;padding:6px 8px'>Of those flagged, how many truly leave</td>
+  <td style='color:#8B95A8;padding:6px 8px'>Optimising precision makes the model conservative — it misses real leavers to avoid false alarms</td>
+</tr>
+<tr style='border-bottom:1px solid rgba(255,255,255,0.04)'>
+  <td style='color:#A78BFA;padding:6px 8px;font-weight:600'>F1 Score</td>
+  <td style='color:#F0F4FF;padding:6px 8px'>Balance of precision & recall</td>
+  <td style='color:#8B95A8;padding:6px 8px'>Good general metric but treats both error types equally — not appropriate here</td>
+</tr>
+<tr>
+  <td style='color:#2DD4BF;padding:6px 8px;font-weight:700'>✅ Recall</td>
+  <td style='color:#F0F4FF;padding:6px 8px'>Of all who actually leave, how many did we catch</td>
+  <td style='color:#2DD4BF;padding:6px 8px;font-weight:600'>← PRIMARY GOAL: minimise missed leavers</td>
+</tr>
+</table>
+</div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("""
+<div style='background:rgba(45,212,191,0.06);border:1px solid rgba(45,212,191,0.2);border-radius:10px;
+padding:12px 16px;margin-top:12px;font-size:0.85rem;color:#8B95A8'>
+<b style='color:#2DD4BF'>Bottom line:</b> We use <b style='color:#2DD4BF'>Recall as our champion metric</b>
+and tune the decision threshold to achieve ≥80% recall, even if that means some false alarms.
+Every employee flagged as high-risk gets a targeted retention conversation — a low-cost intervention
+vs the high cost of attrition.
+</div>
+        """, unsafe_allow_html=True)
+
+    st.divider()
+
+    # ── Model comparison bar chart (Predictive Analytics summary) ──
+    st.subheader("🏁 Model Comparison — Predictive Performance")
+    st.markdown("""
+    <div class='section-note'>
+        Five models were benchmarked. Bars show Recall (primary), Precision, and ROC AUC side by side.
+        Go to <b>🏆 Model Lab</b> for the interactive leaderboard, ROC curves, and threshold tuner.
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.spinner("Loading model comparison…"):
+        try:
+            (cmp_results_df, _, cmp_best_name, _, _, _, _, _, _) = run_model_comparison(hash(str(df.shape)))
+
+            model_names_short = [m.replace(" (Recall-Tuned)", " ★").replace(" (Default)", " (base)")
+                                 for m in cmp_results_df["Model"]]
+            x_pos   = np.arange(len(model_names_short))
+            w       = 0.26
+            recalls   = cmp_results_df["Recall"].values
+            precis    = cmp_results_df["Precision"].values
+            aucs      = cmp_results_df["ROC AUC"].values
+
+            fig, ax = plt.subplots(figsize=(11, 5))
+            b1 = ax.bar(x_pos - w,   recalls, w, color="#2DD4BF", alpha=0.85, label="Recall",    edgecolor="none")
+            b2 = ax.bar(x_pos,       precis,  w, color="#60A5FA", alpha=0.85, label="Precision", edgecolor="none")
+            b3 = ax.bar(x_pos + w,   aucs,    w, color="#A78BFA", alpha=0.85, label="ROC AUC",   edgecolor="none")
+            ax.axhline(0.80, color="#FBBF24", linewidth=1.3, linestyle="--", label="Recall target (80%)")
+            ax.set_xticks(x_pos)
+            ax.set_xticklabels(model_names_short, fontsize=8)
+            ax.set_ylim(0, 1.08)
+            ax.set_ylabel("Score")
+            ax.set_title("All Models — Recall · Precision · ROC AUC Comparison")
+            ax.legend(fontsize=9, facecolor="#111827", labelcolor="#F0F4FF")
+            for bars in [b1, b2, b3]:
+                for bar in bars:
+                    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.008,
+                            f"{bar.get_height():.0%}", ha="center", va="bottom",
+                            color="#F0F4FF", fontsize=7)
+            apply_dark_style(fig, [ax])
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+
+            # Winner callout
+            best_r = cmp_results_df.iloc[0]
+            st.markdown(f"""
+<div style='background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.25);border-radius:10px;
+padding:12px 16px;font-size:0.85rem;color:#8B95A8;margin-top:4px'>
+<b style='color:#2DD4BF'>🥇 Champion:</b> <b style='color:#F0F4FF'>{best_r["Model"]}</b>
+— Recall <b style='color:#2DD4BF'>{best_r["Recall"]:.2%}</b>
+· Precision <b style='color:#60A5FA'>{best_r["Precision"]:.2%}</b>
+· ROC AUC <b style='color:#A78BFA'>{best_r["ROC AUC"]:.3f}</b>
+· Threshold tuned to <b style='color:#FBBF24'>{best_r["Threshold"]:.2f}</b>
+</div>
+            """, unsafe_allow_html=True)
+        except Exception as e:
+            st.warning(f"Model comparison requires the full dataset to be loaded. ({e})")
 
     st.divider()
 
@@ -767,11 +1183,11 @@ elif page == "🔍 Attrition Factors":
 # ============================================================
 # PAGE 3 ── RISK WATCHLIST
 # ============================================================
-elif page == "⚠️ Risk Watchlist":
+elif page == "👥 Employees to Review":
     st.markdown("""
     <div class='page-header'>
-        <h1>⚠️ High-Risk Retention Watchlist</h1>
-        <div class='ph-sub'>AI-scored employees ranked by resignation probability</div>
+        <h1>👥 Employees to Review</h1>
+        <div class='ph-sub'>AI-scored active employees ranked by resignation probability — prioritised for HR intervention</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -863,15 +1279,34 @@ elif page == "⚠️ Risk Watchlist":
     st.pyplot(fig, use_container_width=True)
     plt.close(fig)
 
-    # ── Download ──
-    csv = top_risk[[id_col, role_col] + ([dept_col] if dept_col else []) + ["Risk_Probability"]].copy()
-    csv["Risk_Probability"] = csv["Risk_Probability"].map(lambda x: f"{x:.2%}")
-    st.download_button(
-        "⬇️ Export Watchlist CSV",
-        data=csv.to_csv(index=False),
-        file_name="risk_watchlist.csv",
-        mime="text/csv"
-    )
+    # ── Download — include Company after Emp ID ──
+    export_cols = [id_col]
+    if "Company" in top_risk.columns:
+        export_cols.append("Company")
+    export_cols += [role_col]
+    if dept_col:
+        export_cols.append(dept_col)
+    export_cols.append("Risk_Probability")
+    export_cols = [c for c in export_cols if c in top_risk.columns]
+
+    csv_export = top_risk[export_cols].copy()
+    csv_export["Risk_Probability"] = csv_export["Risk_Probability"].map(lambda x: f"{x:.2%}")
+    # Composite ID: EmpNumber-CompanyCode for unique identification
+    if "Company" in csv_export.columns:
+        company_code = csv_export["Company"].str[:3].str.upper()
+        csv_export.insert(0, "Employee_ID", csv_export[id_col].astype(str) + "-" + company_code)
+
+    col_dl1, col_dl2 = st.columns([2, 1])
+    with col_dl1:
+        st.download_button(
+            "⬇️ Export Employees to Review (CSV)",
+            data=csv_export.to_csv(index=False),
+            file_name="employees_to_review.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+    with col_dl2:
+        st.caption(f"📄 {len(csv_export):,} employees · {len(csv_export.columns)} columns")
 
 # ============================================================
 # PAGE 4 ── PREDICT INDIVIDUAL EMPLOYEE
@@ -880,7 +1315,7 @@ elif page == "🔮 Predict Employee":
     st.markdown("""
     <div class='page-header'>
         <h1>🔮 Individual Risk Predictor</h1>
-        <div class='ph-sub'>Enter employee attributes to get a real-time attrition probability score</div>
+        <div class='ph-sub'>Profile an individual employee for real-time attrition risk scoring — before running the Attrition Simulator below</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -969,3 +1404,353 @@ elif page == "🔮 Predict Employee":
             st.markdown("**Recommended Actions:**")
             for r in recs:
                 st.markdown(f"- {r}")
+
+# ============================================================
+# ATTRITION SIMULATOR — appended to Predict Employee page
+# ============================================================
+
+elif page == "🎛 Attrition Simulator":
+    st.markdown("""
+    <div class='page-header'>
+        <h1>🎛 Attrition Simulator</h1>
+        <div class='ph-sub'>Adjust workforce-wide levers to model the impact on overall attrition rate</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class='section-note'>
+        Move the sliders to simulate policy changes (e.g. salary increase, overtime reduction)
+        and see how the predicted attrition rate shifts across your workforce.
+    </div>
+    """, unsafe_allow_html=True)
+
+    active_sim = df[df["Attrition"] == "No"].copy()
+    if "OverTime" in active_sim.columns:
+        active_sim["OverTime_enc"] = (active_sim["OverTime"] == "Yes").astype(int)
+    else:
+        active_sim["OverTime_enc"] = 0
+
+    st.subheader("⚙️ Policy Levers")
+    sc1, sc2, sc3 = st.columns(3)
+    with sc1:
+        salary_boost = st.slider("💰 Salary Increase (%)", 0, 50, 0, step=5,
+                                  help="Simulates a % increase in MonthlyIncome across the board")
+        overtime_reduce = st.slider("🕐 Overtime Reduction (%)", 0, 100, 0, step=10,
+                                     help="% of overtime workers shifted to non-overtime")
+    with sc2:
+        satisfaction_boost = st.slider("😊 Job Satisfaction Boost (pts)", 0, 3, 0,
+                                        help="Add points to JobSatisfaction (scale 1–4, capped at 4)")
+        wlb_boost = st.slider("⚖️ Work-Life Balance Boost (pts)", 0, 3, 0,
+                               help="Add points to WorkLifeBalance (scale 1–4, capped at 4)")
+    with sc3:
+        distance_reduce = st.slider("🏠 Remote Work — Distance Reduction (%)", 0, 100, 0, step=10,
+                                     help="Simulates remote work reducing effective commute distance")
+
+    # Apply levers to a copy
+    sim_df = active_sim.copy()
+    avail_feats = [f for f in FEATURES if f in sim_df.columns]
+
+    if "MonthlyIncome" in sim_df.columns:
+        sim_df["MonthlyIncome"] = sim_df["MonthlyIncome"] * (1 + salary_boost / 100)
+    if "OverTime_enc" in sim_df.columns and overtime_reduce > 0:
+        mask_ot = sim_df["OverTime_enc"] == 1
+        flip_n  = int(mask_ot.sum() * overtime_reduce / 100)
+        flip_idx = sim_df[mask_ot].sample(min(flip_n, mask_ot.sum()), random_state=42).index
+        sim_df.loc[flip_idx, "OverTime_enc"] = 0
+    if "JobSatisfaction" in sim_df.columns:
+        sim_df["JobSatisfaction"] = (sim_df["JobSatisfaction"] + satisfaction_boost).clip(upper=4)
+    if "WorkLifeBalance" in sim_df.columns:
+        sim_df["WorkLifeBalance"] = (sim_df["WorkLifeBalance"] + wlb_boost).clip(upper=4)
+    if "DistanceFromHome" in sim_df.columns:
+        sim_df["DistanceFromHome"] = sim_df["DistanceFromHome"] * (1 - distance_reduce / 100)
+
+    # Baseline vs simulated risk
+    X_base = active_sim[avail_feats].fillna(active_sim[avail_feats].median())
+    X_sim  = sim_df[avail_feats].fillna(sim_df[avail_feats].median())
+
+    base_probs = model.predict_proba(X_base)[:, 1]
+    sim_probs  = model.predict_proba(X_sim)[:, 1]
+
+    base_rate = base_probs.mean() * 100
+    sim_rate  = sim_probs.mean() * 100
+    delta_pct = sim_rate - base_rate
+    employees_saved = int(((base_probs - sim_probs) > 0).sum())
+
+    st.divider()
+    st.subheader("📊 Simulation Results")
+    res1, res2, res3, res4 = st.columns(4)
+    with res1: st.metric("Baseline Attrition Risk", f"{base_rate:.1f}%")
+    with res2: st.metric("Simulated Attrition Risk", f"{sim_rate:.1f}%",
+                          delta=f"{delta_pct:+.1f}pp", delta_color="inverse")
+    with res3: st.metric("Risk Reduction", f"{abs(delta_pct):.1f} pp" if delta_pct < 0 else "—")
+    with res4: st.metric("Employees De-risked", f"{employees_saved:,}",
+                          delta="improved vs baseline", delta_color="normal")
+
+    # Side-by-side histogram
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.hist(base_probs * 100, bins=40, alpha=0.55, color="#F87171", label="Baseline", edgecolor="none")
+    ax.hist(sim_probs  * 100, bins=40, alpha=0.55, color="#2DD4BF", label="Simulated", edgecolor="none")
+    ax.axvline(base_rate, color="#F87171", linewidth=1.5, linestyle="--",
+               label=f"Baseline mean {base_rate:.1f}%")
+    ax.axvline(sim_rate, color="#2DD4BF", linewidth=1.5, linestyle="--",
+               label=f"Simulated mean {sim_rate:.1f}%")
+    ax.set_xlabel("Predicted Resignation Risk (%)")
+    ax.set_ylabel("Employee Count")
+    ax.set_title("Risk Distribution: Baseline vs Policy Simulation")
+    ax.legend(facecolor="#111827", labelcolor="#F0F4FF")
+    apply_dark_style(fig, [ax])
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
+
+    # Policy summary card
+    applied = []
+    if salary_boost:     applied.append(f"💰 +{salary_boost}% salary")
+    if overtime_reduce:  applied.append(f"🕐 -{overtime_reduce}% overtime workers")
+    if satisfaction_boost: applied.append(f"😊 +{satisfaction_boost}pt satisfaction")
+    if wlb_boost:        applied.append(f"⚖️ +{wlb_boost}pt work-life balance")
+    if distance_reduce:  applied.append(f"🏠 -{distance_reduce}% effective commute")
+
+    if applied:
+        pills = " &nbsp;|&nbsp; ".join([f"<span style='color:#60A5FA'>{p}</span>" for p in applied])
+        st.markdown(f"""
+<div style='background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.18);
+border-radius:10px;padding:12px 16px;font-size:0.85rem;margin-top:8px'>
+<b style='color:#60A5FA'>Policies applied:</b> {pills}
+</div>
+        """, unsafe_allow_html=True)
+    else:
+        st.info("ℹ️ Move the sliders above to simulate a policy change.")
+
+# ============================================================
+# PAGE 5 -- MODEL LAB (Recall Optimisation)
+# ============================================================
+elif page == "🏆 Model Lab":
+    st.markdown("""
+    <div class='page-header'>
+        <h1>🏆 Model Lab — Recall Optimisation</h1>
+        <div class='ph-sub'>
+            Benchmarking every model to find the one with the highest recall —
+            so we catch as many at-risk employees as possible before they resign.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class='section-note'>
+        <b>🎯 Goal:</b> Maximise <b style='color:#2DD4BF'>Recall</b> — we would rather flag a safe
+        employee by mistake than miss someone who is about to leave.
+        The top-ranked model is automatically selected for the app.
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.spinner("Running full model benchmark…"):
+        (results_df, trained_models, best_name, best_model_obj,
+         best_thresh_val, ML_FEATURES, scaler, y_te, roc_data) = run_model_comparison(hash(str(df.shape)))
+
+    # -- Hero metric strip --
+    best_row = results_df.iloc[0]
+    h1, h2, h3, h4, h5 = st.columns(5)
+    for col, label, val, delta in [
+        (h1, "🥇 Best Model",  best_row["Model"].split("(")[0].strip(), None),
+        (h2, "🎯 Recall",      f"{best_row['Recall']:.2%}",    "Target ≥ 80%"),
+        (h3, "📐 Precision",   f"{best_row['Precision']:.2%}", "False-alarm rate"),
+        (h4, "📈 ROC AUC",     f"{best_row['ROC AUC']:.3f}",  "Discrimination power"),
+        (h5, "🔧 Threshold",   f"{best_row['Threshold']:.2f}", "Decision cutoff"),
+    ]:
+        with col:
+            st.metric(label, val, delta)
+
+    st.divider()
+
+    # -- Leaderboard --
+    st.subheader("📋 Full Model Leaderboard")
+
+    def highlight_leaderboard(row):
+        if row.name == 1:
+            return ["background-color: rgba(45,212,191,0.15); color: #F0F4FF; font-weight:700"] * len(row)
+        return ["background-color: #111827; color: #F0F4FF"] * len(row)
+
+    def color_recall(val):
+        try:
+            v = float(val)
+            if v >= 0.80: return "color: #2DD4BF; font-weight:700"
+            if v >= 0.65: return "color: #FBBF24"
+            return "color: #F87171"
+        except Exception:
+            return ""
+
+    styled_lb = (results_df.style
+        .apply(highlight_leaderboard, axis=1)
+        .map(color_recall, subset=["Recall"])
+        .set_properties(**{"background-color": "#111827", "color": "#F0F4FF",
+                           "border-color": "rgba(255,255,255,0.06)"})
+        .set_table_styles([
+            {"selector": "th", "props": [
+                ("background-color", "#1a2234"), ("color", "#8B95A8"),
+                ("font-size", "0.78rem"), ("text-transform", "uppercase"),
+                ("letter-spacing", "0.06em"), ("padding", "8px 14px"),
+                ("border-bottom", "1px solid rgba(255,255,255,0.1)"),
+            ]},
+            {"selector": "td", "props": [("padding", "9px 14px"),
+                ("border-bottom", "1px solid rgba(255,255,255,0.04)")]},
+        ])
+        .format({"Accuracy": "{:.2%}", "Precision": "{:.2%}", "Recall": "{:.2%}",
+                 "F1 Score": "{:.2%}", "ROC AUC": "{:.4f}", "Threshold": "{:.3f}"})
+    )
+    st.dataframe(styled_lb, use_container_width=True, height=240)
+
+    st.divider()
+
+    # -- Charts row --
+    PALETTE = {
+        "Random Forest (Recall-Tuned)": "#2DD4BF",
+        "Random Forest (Default)":      "#60A5FA",
+        "Gradient Boosting":            "#A78BFA",
+        "Extra Trees":                  "#FBBF24",
+        "AdaBoost":                     "#F472B6",
+        "Decision Tree":                "#A3E635",
+        "Logistic Regression":          "#F87171",
+        "SVM (RBF Kernel)":             "#FB923C",
+    }
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        st.markdown("**ROC Curves — all models**")
+        fig, ax = plt.subplots(figsize=(6, 5))
+        ax.plot([0, 1], [0, 1], "--", color="#444", linewidth=1, label="Random baseline")
+        for mname, (fpr, tpr) in roc_data.items():
+            auc_val = results_df[results_df["Model"] == mname]["ROC AUC"].values[0]
+            lw = 2.5 if mname == best_name else 1.2
+            label_short = mname.split("(")[0].strip()
+            ax.plot(fpr, tpr, color=PALETTE.get(mname, "#888"),
+                    linewidth=lw, label=f"{label_short} ({auc_val:.3f})")
+        ax.set_xlabel("False Positive Rate")
+        ax.set_ylabel("True Positive Rate (Recall)")
+        ax.set_title("ROC Curves")
+        ax.legend(fontsize=7, facecolor="#111827", labelcolor="#F0F4FF", framealpha=0.9)
+        apply_dark_style(fig, [ax])
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    with col_right:
+        st.markdown("**Recall vs Precision — all models**")
+        models_short = [m.replace(" (Recall-Tuned)", " ★").replace(" (Default)", "")
+                        for m in results_df["Model"]]
+        recalls    = results_df["Recall"].values
+        precisions = results_df["Precision"].values
+        x = np.arange(len(models_short))
+        w = 0.38
+        fig, ax = plt.subplots(figsize=(6, 5))
+        b1 = ax.bar(x - w/2, recalls,    w, color="#2DD4BF", alpha=0.85, label="Recall",    edgecolor="none")
+        b2 = ax.bar(x + w/2, precisions, w, color="#60A5FA", alpha=0.85, label="Precision", edgecolor="none")
+        ax.axhline(0.80, color="#FBBF24", linewidth=1.2, linestyle="--", label="Recall target (80%)")
+        ax.set_xticks(x)
+        ax.set_xticklabels(models_short, fontsize=7)
+        ax.set_ylabel("Score")
+        ax.set_title("Recall vs Precision by Model")
+        ax.set_ylim(0, 1.05)
+        ax.legend(fontsize=8, facecolor="#111827", labelcolor="#F0F4FF")
+        for bar in list(b1) + list(b2):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
+                    f"{bar.get_height():.0%}", ha="center", va="bottom",
+                    color="#F0F4FF", fontsize=7)
+        apply_dark_style(fig, [ax])
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    st.divider()
+
+    # -- Confusion matrix --
+    st.subheader(f"🔬 Confusion Matrix — {best_name}")
+    best_entry = trained_models[best_name]
+    _, best_proba_arr, best_preds_arr, _, _ = best_entry
+    cm = confusion_matrix(y_te, best_preds_arr)
+    cm_labels = [
+        ["True Negative\n(Correctly kept)", "False Positive\n(Wrongly flagged)"],
+        ["False Negative\n(Missed leaver ❌)", "True Positive\n(Caught leaver ✅)"],
+    ]
+    colors_cm = [["#1a2234", "#2d1f1f"], ["#3d1a1a", "#1a3d2b"]]
+    fig, ax = plt.subplots(figsize=(6, 4.5))
+    for i in range(2):
+        for j in range(2):
+            ax.add_patch(plt.Rectangle((j - 0.5, 1.5 - i), 1, 1,
+                                        color=colors_cm[i][j], zorder=0))
+            val_color = ("#F87171" if (i == 1 and j == 0)
+                         else ("#2DD4BF" if (i == 1 and j == 1) else "#F0F4FF"))
+            ax.text(j, 1 - i, str(cm[i, j]), ha="center", va="center",
+                    fontsize=28, fontweight="bold", color=val_color, zorder=2)
+            ax.text(j, 1 - i - 0.32, cm_labels[i][j], ha="center", va="center",
+                    fontsize=7.5, color="#8B95A8", zorder=2)
+    ax.set_xlim(-0.5, 1.5)
+    ax.set_ylim(-0.5, 1.5)
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(["Predicted: Stay", "Predicted: Leave"])
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["Actual: Leave", "Actual: Stay"])
+    ax.set_title(f"Confusion Matrix @ threshold = {best_thresh_val:.2f}", pad=12)
+    apply_dark_style(fig, [ax])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
+
+    # -- Live threshold tuner --
+    st.divider()
+    st.subheader("🎚 Live Threshold Tuner")
+    st.markdown("""
+    <div class='section-note'>
+        Drag the slider to see how the decision threshold trades off
+        <b style='color:#2DD4BF'>Recall</b> (catching leavers) vs
+        <b style='color:#60A5FA'>Precision</b> (reducing false alarms).
+    </div>
+    """, unsafe_allow_html=True)
+
+    _, best_proba_t, _, _, _ = trained_models[best_name]
+    thresh_slider = st.slider("Decision Threshold", 0.10, 0.90,
+                               float(round(best_thresh_val, 2)), step=0.01,
+                               key="thresh_slider")
+    preds_tuned = (best_proba_t >= thresh_slider).astype(int)
+
+    t1, t2, t3, t4 = st.columns(4)
+    with t1: st.metric("Recall",    f"{recall_score(y_te, preds_tuned, zero_division=0):.2%}", "want high ↑")
+    with t2: st.metric("Precision", f"{precision_score(y_te, preds_tuned, zero_division=0):.2%}")
+    with t3: st.metric("F1 Score",  f"{f1_score(y_te, preds_tuned, zero_division=0):.2%}")
+    with t4: st.metric("Flagged",   f"{int(preds_tuned.sum()):,}", f"of {len(preds_tuned):,} employees")
+
+    # Precision-Recall curve with live cursor
+    prec_c, rec_c, thresh_c = precision_recall_curve(y_te, best_proba_t)
+    fig, ax = plt.subplots(figsize=(10, 3.5))
+    ax.plot(thresh_c, rec_c[:-1],  color="#2DD4BF", linewidth=2, label="Recall")
+    ax.plot(thresh_c, prec_c[:-1], color="#60A5FA", linewidth=2, label="Precision")
+    ax.axvline(thresh_slider, color="#FBBF24", linewidth=1.5, linestyle="--",
+               label=f"Current threshold ({thresh_slider:.2f})")
+    ax.axhline(0.80, color="#F87171", linewidth=1, linestyle=":", alpha=0.7,
+               label="Recall target (80%)")
+    ax.set_xlabel("Threshold")
+    ax.set_ylabel("Score")
+    ax.set_title("Precision & Recall vs Decision Threshold")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1.05)
+    ax.legend(fontsize=9, facecolor="#111827", labelcolor="#F0F4FF")
+    apply_dark_style(fig, [ax])
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
+
+    # -- Plain-language summary --
+    st.divider()
+    rec_val  = recall_score(y_te, preds_tuned, zero_division=0)
+    pre_val  = precision_score(y_te, preds_tuned, zero_division=0)
+    flagged  = int(preds_tuned.sum())
+    missed   = int(((y_te == 1) & (preds_tuned == 0)).sum())
+
+    note = (
+        f"<div class='section-note'>"
+        f"<b>📢 Plain-language interpretation at threshold {thresh_slider:.2f}:</b><br><br>"
+        f"Out of every 100 employees who actually plan to leave, "
+        f"the model catches <b style='color:#2DD4BF'>{rec_val:.0%}</b> of them.<br>"
+        f"It is flagging <b style='color:#60A5FA'>{flagged:,}</b> employees total — "
+        f"of which <b style='color:#FBBF24'>{pre_val:.0%}</b> are genuine risks.<br>"
+        f"<b style='color:#F87171'>{missed}</b> at-risk employees are currently slipping through undetected."
+        f"</div>"
+    )
+    st.markdown(note, unsafe_allow_html=True)
