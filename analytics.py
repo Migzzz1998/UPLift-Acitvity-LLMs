@@ -709,8 +709,7 @@ with st.sidebar:
     st.markdown("<div class='nav-section-label'>Navigation</div>", unsafe_allow_html=True)
     page = st.radio(
         "NAVIGATION",
-        ["📊 Dashboard", "🔮 Predict Employee", "🎛 Attrition Simulator",
-         "👥 Employees to Review", "📈 Predictive Analytics", "🏆 Model Lab"],
+        ["🔮 Predict Employee", "👥 Employees to Review", "📈 Predictive Analytics", "🏆 Model Lab"],
         label_visibility="collapsed",
     )
 
@@ -724,7 +723,7 @@ with st.sidebar:
         index=0,
         label_visibility="collapsed",
         key="active_model_select",
-        help="Changes the model used in Predict Employee, Employees to Review, and Attrition Simulator",
+        help="Changes the model used in Predict Employee and Employees to Review",
     )
     sel_meta = MODEL_CATALOGUE[selected_model_name]
     tag_html = (f"<span class='model-tag' style='background:rgba(45,212,191,0.12);"
@@ -818,158 +817,7 @@ def risk_color(pct):
 # ============================================================
 # PAGE 1 ── DASHBOARD
 # ============================================================
-if page == "📊 Dashboard":
-    st.markdown("""
-    <div class='page-header'>
-        <h1>Workforce Performance Overview</h1>
-        <div class='ph-sub'>Real-time attrition intelligence across your organization</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── KPI Row ──
-    atr_rate = (filtered_df["Attrition"] == "Yes").mean() * 100
-    avg_income = filtered_df["MonthlyIncome"].mean() if "MonthlyIncome" in filtered_df.columns else 0
-    avg_tenure = filtered_df["TotalWorkingYears"].mean() if "TotalWorkingYears" in filtered_df.columns else 0
-    active_count = (filtered_df["Attrition"] == "No").sum()
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(kpi_card("👥", "Total Headcount", f"{len(filtered_df):,}", "Filtered records",
-                             f"+{active_count:,} active", "badge-down"), unsafe_allow_html=True)
-    with c2:
-        badge_cls = "badge-up" if atr_rate > 15 else "badge-down"
-        st.markdown(kpi_card("📉", "Attrition Rate", f"{atr_rate:.1f}%", "Historical turnover",
-                             "⚠ High" if atr_rate > 15 else "✓ Healthy", badge_cls), unsafe_allow_html=True)
-    with c3:
-        st.markdown(kpi_card("💵", "Avg Monthly Salary", f"${avg_income:,.0f}", "Across filtered set",
-                             "USD", "badge-neu"), unsafe_allow_html=True)
-    with c4:
-        st.markdown(kpi_card("🏅", "Avg Experience", f"{avg_tenure:.1f}Y", "Total working years",
-                             "Industry avg ~8Y", "badge-neu"), unsafe_allow_html=True)
-
-    st.divider()
-
-    # ── Charts Row ──
-    tab1, tab2, tab3 = st.tabs(["📈 Attrition by Department", "💰 Income Distribution", "🕐 Tenure vs Risk"])
-
-    with tab1:
-        if "Department" in filtered_df.columns:
-            dept_atr = (filtered_df.groupby("Department")["Attrition"]
-                        .apply(lambda x: (x == "Yes").mean() * 100)
-                        .sort_values(ascending=False))
-
-            fig, ax = plt.subplots(figsize=(10, 4))
-            bars = ax.bar(dept_atr.index, dept_atr.values,
-                          color=ACCENT_PALETTE[:len(dept_atr)], edgecolor="none", width=0.55)
-            ax.set_ylabel("Attrition Rate (%)")
-            ax.set_title("Attrition Rate by Department")
-            for bar, val in zip(bars, dept_atr.values):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.3,
-                        f"{val:.1f}%", ha="center", va="bottom", color="#F0F4FF", fontsize=9)
-            apply_dark_style(fig, [ax])
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
-        else:
-            st.info("Department column not found in dataset.")
-
-    with tab2:
-        if "MonthlyIncome" in filtered_df.columns:
-            fig, ax = plt.subplots(figsize=(10, 4))
-            for label, color in [("No", "#2DD4BF"), ("Yes", "#F87171")]:
-                subset = filtered_df[filtered_df["Attrition"] == label]["MonthlyIncome"]
-                ax.hist(subset, bins=30, alpha=0.65, color=color, label=f"Attrition: {label}", edgecolor="none")
-            ax.set_xlabel("Monthly Income ($)")
-            ax.set_ylabel("Employee Count")
-            ax.set_title("Salary Distribution: Retained vs Departed")
-            ax.legend(facecolor="#111827", labelcolor="#F0F4FF", framealpha=0.8)
-            apply_dark_style(fig, [ax])
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
-
-    with tab3:
-        if "TotalWorkingYears" in filtered_df.columns:
-            fig, ax = plt.subplots(figsize=(10, 4))
-            for label, color, marker in [("No", "#2DD4BF", "o"), ("Yes", "#F87171", "^")]:
-                sub = filtered_df[filtered_df["Attrition"] == label].sample(min(300, len(filtered_df)))
-                ax.scatter(sub["TotalWorkingYears"],
-                           sub["MonthlyIncome"] if "MonthlyIncome" in sub.columns else sub["YearsAtCompany"],
-                           c=color, alpha=0.45, s=22, marker=marker, label=f"Attrition: {label}")
-            ax.set_xlabel("Total Working Years")
-            ax.set_ylabel("Monthly Income ($)" if "MonthlyIncome" in filtered_df.columns else "Years at Company")
-            ax.set_title("Experience vs. Income — Colored by Attrition")
-            ax.legend(facecolor="#111827", labelcolor="#F0F4FF")
-            apply_dark_style(fig, [ax])
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
-
-    st.divider()
-
-    # ── Data Snapshot ──
-    with st.expander("📋 Data Snapshot (first 20 rows)", expanded=False):
-        display_df = filtered_df.head(20).copy()
-
-        def style_attrition(val):
-            if val == "Yes":
-                return "background-color: rgba(248,113,113,0.15); color: #F87171; font-weight:600"
-            elif val == "No":
-                return "background-color: rgba(45,212,191,0.12); color: #2DD4BF; font-weight:600"
-            return ""
-
-        styled = display_df.style.set_properties(**{
-            "background-color": "#111827",
-            "color": "#F0F4FF",
-            "border-color": "rgba(255,255,255,0.06)",
-            "font-size": "0.85rem",
-        }).set_table_styles([
-            {"selector": "th", "props": [
-                ("background-color", "#1a2234"),
-                ("color", "#8B95A8"),
-                ("font-size", "0.78rem"),
-                ("text-transform", "uppercase"),
-                ("letter-spacing", "0.06em"),
-                ("border-bottom", "1px solid rgba(255,255,255,0.08)"),
-                ("padding", "8px 12px"),
-            ]},
-            {"selector": "td", "props": [
-                ("padding", "7px 12px"),
-                ("border-bottom", "1px solid rgba(255,255,255,0.04)"),
-            ]},
-            {"selector": "tr:hover td", "props": [
-                ("background-color", "rgba(96,165,250,0.05)"),
-            ]},
-        ])
-
-        if "Attrition" in display_df.columns:
-            styled = styled.map(style_attrition, subset=["Attrition"])
-
-        st.dataframe(styled, use_container_width=True, height=420)
-
-    # ── Workforce Composition ──
-    st.subheader("Workforce Composition")
-    comp_cols = [c for c in ["Gender", "OverTime", "JobLevel", "Education"] if c in filtered_df.columns]
-    if comp_cols:
-        cols_row = st.columns(len(comp_cols))
-        for col, feat in zip(cols_row, comp_cols):
-            with col:
-                vc = filtered_df[feat].value_counts()
-                fig, ax = plt.subplots(figsize=(3.5, 3.5))
-                wedges, texts, autotexts = ax.pie(
-                    vc.values, labels=vc.index,
-                    colors=ACCENT_PALETTE[:len(vc)],
-                    autopct="%1.0f%%", pctdistance=0.75,
-                    startangle=90, wedgeprops=dict(linewidth=0)
-                )
-                for t in texts: t.set_color("#8B95A8"); t.set_fontsize(8)
-                for a in autotexts: a.set_color("#F0F4FF"); a.set_fontsize(8)
-                ax.set_title(feat, color="#F0F4FF", fontsize=10)
-                apply_dark_style(fig, [ax])
-                st.pyplot(fig, use_container_width=True)
-                plt.close(fig)
-
-# ============================================================
-# PAGE 2 ── ATTRITION FACTORS
-# ============================================================
-elif page == "📈 Predictive Analytics":
+if page == "📈 Predictive Analytics":
     st.markdown("""
     <div class='page-header'>
         <h1>📈 Predictive Analytics</h1>
@@ -1315,7 +1163,7 @@ elif page == "🔮 Predict Employee":
     st.markdown("""
     <div class='page-header'>
         <h1>🔮 Individual Risk Predictor</h1>
-        <div class='ph-sub'>Profile an individual employee for real-time attrition risk scoring — before running the Attrition Simulator below</div>
+        <div class='ph-sub'>Profile an individual employee for a real-time attrition risk score</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1409,121 +1257,6 @@ elif page == "🔮 Predict Employee":
 # ATTRITION SIMULATOR — appended to Predict Employee page
 # ============================================================
 
-elif page == "🎛 Attrition Simulator":
-    st.markdown("""
-    <div class='page-header'>
-        <h1>🎛 Attrition Simulator</h1>
-        <div class='ph-sub'>Adjust workforce-wide levers to model the impact on overall attrition rate</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class='section-note'>
-        Move the sliders to simulate policy changes (e.g. salary increase, overtime reduction)
-        and see how the predicted attrition rate shifts across your workforce.
-    </div>
-    """, unsafe_allow_html=True)
-
-    active_sim = df[df["Attrition"] == "No"].copy()
-    if "OverTime" in active_sim.columns:
-        active_sim["OverTime_enc"] = (active_sim["OverTime"] == "Yes").astype(int)
-    else:
-        active_sim["OverTime_enc"] = 0
-
-    st.subheader("⚙️ Policy Levers")
-    sc1, sc2, sc3 = st.columns(3)
-    with sc1:
-        salary_boost = st.slider("💰 Salary Increase (%)", 0, 50, 0, step=5,
-                                  help="Simulates a % increase in MonthlyIncome across the board")
-        overtime_reduce = st.slider("🕐 Overtime Reduction (%)", 0, 100, 0, step=10,
-                                     help="% of overtime workers shifted to non-overtime")
-    with sc2:
-        satisfaction_boost = st.slider("😊 Job Satisfaction Boost (pts)", 0, 3, 0,
-                                        help="Add points to JobSatisfaction (scale 1–4, capped at 4)")
-        wlb_boost = st.slider("⚖️ Work-Life Balance Boost (pts)", 0, 3, 0,
-                               help="Add points to WorkLifeBalance (scale 1–4, capped at 4)")
-    with sc3:
-        distance_reduce = st.slider("🏠 Remote Work — Distance Reduction (%)", 0, 100, 0, step=10,
-                                     help="Simulates remote work reducing effective commute distance")
-
-    # Apply levers to a copy
-    sim_df = active_sim.copy()
-    avail_feats = [f for f in FEATURES if f in sim_df.columns]
-
-    if "MonthlyIncome" in sim_df.columns:
-        sim_df["MonthlyIncome"] = sim_df["MonthlyIncome"] * (1 + salary_boost / 100)
-    if "OverTime_enc" in sim_df.columns and overtime_reduce > 0:
-        mask_ot = sim_df["OverTime_enc"] == 1
-        flip_n  = int(mask_ot.sum() * overtime_reduce / 100)
-        flip_idx = sim_df[mask_ot].sample(min(flip_n, mask_ot.sum()), random_state=42).index
-        sim_df.loc[flip_idx, "OverTime_enc"] = 0
-    if "JobSatisfaction" in sim_df.columns:
-        sim_df["JobSatisfaction"] = (sim_df["JobSatisfaction"] + satisfaction_boost).clip(upper=4)
-    if "WorkLifeBalance" in sim_df.columns:
-        sim_df["WorkLifeBalance"] = (sim_df["WorkLifeBalance"] + wlb_boost).clip(upper=4)
-    if "DistanceFromHome" in sim_df.columns:
-        sim_df["DistanceFromHome"] = sim_df["DistanceFromHome"] * (1 - distance_reduce / 100)
-
-    # Baseline vs simulated risk
-    X_base = active_sim[avail_feats].fillna(active_sim[avail_feats].median())
-    X_sim  = sim_df[avail_feats].fillna(sim_df[avail_feats].median())
-
-    base_probs = model.predict_proba(X_base)[:, 1]
-    sim_probs  = model.predict_proba(X_sim)[:, 1]
-
-    base_rate = base_probs.mean() * 100
-    sim_rate  = sim_probs.mean() * 100
-    delta_pct = sim_rate - base_rate
-    employees_saved = int(((base_probs - sim_probs) > 0).sum())
-
-    st.divider()
-    st.subheader("📊 Simulation Results")
-    res1, res2, res3, res4 = st.columns(4)
-    with res1: st.metric("Baseline Attrition Risk", f"{base_rate:.1f}%")
-    with res2: st.metric("Simulated Attrition Risk", f"{sim_rate:.1f}%",
-                          delta=f"{delta_pct:+.1f}pp", delta_color="inverse")
-    with res3: st.metric("Risk Reduction", f"{abs(delta_pct):.1f} pp" if delta_pct < 0 else "—")
-    with res4: st.metric("Employees De-risked", f"{employees_saved:,}",
-                          delta="improved vs baseline", delta_color="normal")
-
-    # Side-by-side histogram
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.hist(base_probs * 100, bins=40, alpha=0.55, color="#F87171", label="Baseline", edgecolor="none")
-    ax.hist(sim_probs  * 100, bins=40, alpha=0.55, color="#2DD4BF", label="Simulated", edgecolor="none")
-    ax.axvline(base_rate, color="#F87171", linewidth=1.5, linestyle="--",
-               label=f"Baseline mean {base_rate:.1f}%")
-    ax.axvline(sim_rate, color="#2DD4BF", linewidth=1.5, linestyle="--",
-               label=f"Simulated mean {sim_rate:.1f}%")
-    ax.set_xlabel("Predicted Resignation Risk (%)")
-    ax.set_ylabel("Employee Count")
-    ax.set_title("Risk Distribution: Baseline vs Policy Simulation")
-    ax.legend(facecolor="#111827", labelcolor="#F0F4FF")
-    apply_dark_style(fig, [ax])
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
-
-    # Policy summary card
-    applied = []
-    if salary_boost:     applied.append(f"💰 +{salary_boost}% salary")
-    if overtime_reduce:  applied.append(f"🕐 -{overtime_reduce}% overtime workers")
-    if satisfaction_boost: applied.append(f"😊 +{satisfaction_boost}pt satisfaction")
-    if wlb_boost:        applied.append(f"⚖️ +{wlb_boost}pt work-life balance")
-    if distance_reduce:  applied.append(f"🏠 -{distance_reduce}% effective commute")
-
-    if applied:
-        pills = " &nbsp;|&nbsp; ".join([f"<span style='color:#60A5FA'>{p}</span>" for p in applied])
-        st.markdown(f"""
-<div style='background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.18);
-border-radius:10px;padding:12px 16px;font-size:0.85rem;margin-top:8px'>
-<b style='color:#60A5FA'>Policies applied:</b> {pills}
-</div>
-        """, unsafe_allow_html=True)
-    else:
-        st.info("ℹ️ Move the sliders above to simulate a policy change.")
-
-# ============================================================
-# PAGE 5 -- MODEL LAB (Recall Optimisation)
-# ============================================================
 elif page == "🏆 Model Lab":
     st.markdown("""
     <div class='page-header'>
