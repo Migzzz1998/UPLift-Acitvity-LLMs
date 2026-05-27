@@ -1350,7 +1350,7 @@ elif page == "👥 Employees to Review":
 # ============================================================
 # PAGE 4 ── PREDICT INDIVIDUAL EMPLOYEE
 # ============================================================
-elif page == "🔮 Predict Employee":
+elif page == "🔮 Attrition Simulator":
     st.markdown("""
     <div class='page-header'>
         <h1>🔮 Individual Risk Predictor</h1>
