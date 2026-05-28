@@ -838,7 +838,7 @@ with st.sidebar:
     page = st.radio(
         "NAVIGATION",
         ["📊 Executive Summary", "🎯 Attrition Drivers", "⚖️ Wellbeing/Performance",
-         "📈 AI Model Intelligence", "👥 Employees to Review", "🔮 Predict Employee",
+         "📈 AI Model Intelligence", "👥 Employees to Review", "🔮 Risk Predictor [Beta]",
          "💰 Attrition Simulator"],
         label_visibility="collapsed",
     )
@@ -964,6 +964,11 @@ def risk_color(pct):
     if pct >= 40: return "#FBBF24", "medium"
     return "#2DD4BF", "low"
 
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+
 if page == "📈 AI Model Intelligence":
     with st.spinner("Training & benchmarking models…"):
         (results_df, trained_models, best_name, best_model_obj,
@@ -1022,7 +1027,42 @@ if page == "📈 AI Model Intelligence":
 
     st.divider()
 
-    _lb_col, _roc_col = st.columns([1.1, 0.9])
+    with st.expander("📖 Why Recall over Accuracy / Precision?", expanded=True):
+        _ra, _rb = st.columns(2)
+        with _ra:
+            st.markdown("""
+<div style='background:#111827;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px 18px'>
+<div style='font-size:0.72rem;color:#8B95A8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px'>The Core Problem</div>
+<p style='color:#F0F4FF;font-size:0.88rem;line-height:1.6'>
+Missing a leaver costs <b style='color:#F87171'>50–200% of annual salary</b> in replacement,
+lost knowledge, and team disruption. A false alarm costs one retention conversation.
+</p>
+<p style='color:#8B95A8;font-size:0.8rem;margin-top:8px'>
+We therefore tune the threshold to maximise recall ≥ 80%, accepting some false positives.
+</p>
+</div>""", unsafe_allow_html=True)
+        with _rb:
+            st.markdown("""
+<div style='background:#111827;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px 18px'>
+<table style='width:100%;border-collapse:collapse;font-size:0.78rem'>
+<tr style='border-bottom:1px solid rgba(255,255,255,0.07)'>
+  <th style='color:#8B95A8;padding:5px 7px;text-align:left'>Metric</th>
+  <th style='color:#8B95A8;padding:5px 7px;text-align:left'>Risk</th>
+</tr>
+<tr><td style='color:#FBBF24;padding:5px 7px;font-weight:600'>Accuracy</td>
+    <td style='color:#8B95A8;padding:5px 7px'>Misleading on 84/16 imbalanced classes</td></tr>
+<tr><td style='color:#60A5FA;padding:5px 7px;font-weight:600'>Precision</td>
+    <td style='color:#8B95A8;padding:5px 7px'>Makes model conservative — misses real leavers</td></tr>
+<tr><td style='color:#A78BFA;padding:5px 7px;font-weight:600'>F1 Score</td>
+    <td style='color:#8B95A8;padding:5px 7px'>Treats both error types equally — wrong tradeoff</td></tr>
+<tr><td style='color:#2DD4BF;padding:5px 7px;font-weight:700'>✅ Recall</td>
+    <td style='color:#2DD4BF;padding:5px 7px;font-weight:600'>Minimises missed leavers — PRIMARY GOAL</td></tr>
+</table>
+</div>""", unsafe_allow_html=True)
+            
+    st.divider()
+
+    _lb_col = st.columns(1)[0]
 
     with _lb_col:
         st.markdown("**📋 Model Leaderboard** — sorted by Recall")
@@ -1048,34 +1088,102 @@ if page == "📈 AI Model Intelligence":
             .set_properties(**{"background-color":"#111827","color":"#F0F4FF","border-color":"rgba(255,255,255,0.05)"})
             .set_table_styles([
                 {"selector":"th","props":[("background-color","#1a2234"),("color","#8B95A8"),
-                 ("font-size","0.72rem"),("text-transform","uppercase"),("letter-spacing","0.06em"),
-                 ("padding","6px 10px"),("border-bottom","1px solid rgba(255,255,255,0.08)")]},
+                    ("font-size","0.72rem"),("text-transform","uppercase"),("letter-spacing","0.06em"),
+                    ("padding","6px 10px"),("border-bottom","1px solid rgba(255,255,255,0.08)")]},
                 {"selector":"td","props":[("padding","6px 10px"),
-                 ("border-bottom","1px solid rgba(255,255,255,0.03)")]},
+                    ("border-bottom","1px solid rgba(255,255,255,0.03)")]},
             ])
             .format({"Recall":"{:.2%}","Precision":"{:.2%}","F1 Score":"{:.2%}",
-                     "ROC AUC":"{:.3f}","Threshold":"{:.3f}"})
+                        "ROC AUC":"{:.3f}","Threshold":"{:.3f}"})
         )
-        st.dataframe(styled_lb, use_container_width=True, height=310)
+    st.dataframe(styled_lb, use_container_width=True, height=310)
+    st.divider()
+
+    # with _roc_col:
+    #     st.markdown("**ROC Curves — all models**")
+    #     fig, ax = plt.subplots(figsize=(5, 4))
+    #     ax.plot([0,1],[0,1],"--",color="#444",linewidth=0.9,label="Baseline")
+    #     for mname,(fpr,tpr) in roc_data.items():
+    #         auc_val = results_df[results_df["Model"]==mname]["ROC AUC"].values[0]
+    #         is_active = (mname == _active_model_name)
+    #         lw = 2.8 if is_active else 1.0
+    #         alpha = 1.0 if is_active else 0.45
+    #         label_s = mname.split("(")[0].strip()
+    #         ax.plot(fpr,tpr,color=PALETTE.get(mname,"#888"),linewidth=lw,alpha=alpha,
+    #                 label=f"{label_s} ({auc_val:.3f})")
+    #     ax.set_xlabel("False Positive Rate",fontsize=8)
+    #     ax.set_ylabel("True Positive Rate",fontsize=8)
+    #     ax.set_title("ROC Curves",fontsize=9)
+    #     ax.legend(fontsize=6,facecolor="#111827",labelcolor="#F0F4FF",framealpha=0.9,loc="lower right")
+    #     apply_dark_style(fig,[ax])
+    #     st.pyplot(fig,use_container_width=True)
+    #     plt.close(fig)
+
+    # st.divider()
+
+    _imp_col, _roc_col = st.columns([1, 1])
+
+    with _imp_col:
+        st.markdown("**Feature Importance — active model**")
+        if hasattr(_active_clf, "feature_importances_"):
+            _imp_vals = _active_clf.feature_importances_
+        elif hasattr(_active_clf, "coef_"):
+            _imp_vals = np.abs(_active_clf.coef_[0])
+        else:
+            _imp_vals = np.ones(len(ML_FEATURES)) / len(ML_FEATURES)
+        
+        importances = pd.Series(_imp_vals, index=ML_FEATURES).sort_values(ascending=True)
+        colors_imp  = [ACCENT_PALETTE[i % len(ACCENT_PALETTE)] for i in range(len(importances))]
+        colors_imp[-1] = _active_color
+
+        # COMPACT OPTIMIZATION: Reduced height footprint to 2.5 inches
+        fig, ax = plt.subplots(figsize=(5, 2.5))
+        bars_imp = ax.barh(importances.index, importances.values, color=colors_imp, edgecolor="none", height=0.6)
+        
+        # Clear, tiny font scales with tight padding boundaries
+        ax.set_xlabel("Importance", fontsize=7, labelpad=2)
+        ax.tick_params(axis='both', which='major', labelsize=7, pad=2)
+        
+        # Tight layout alignment to clip empty canvas margins
+        fig.tight_layout(pad=0.2)
+        
+        # Micro value indicators directly nested on bars
+        for bar, val in zip(bars_imp, importances.values):
+            ax.text(val + 0.002, bar.get_y() + bar.get_height()/2, f"{val:.3f}", 
+                    va="center", color="#F0F4FF", fontsize=6.5, weight="bold")
+            
+        apply_dark_style(fig, [ax])
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
 
     with _roc_col:
         st.markdown("**ROC Curves — all models**")
-        fig, ax = plt.subplots(figsize=(5, 4))
-        ax.plot([0,1],[0,1],"--",color="#444",linewidth=0.9,label="Baseline")
-        for mname,(fpr,tpr) in roc_data.items():
-            auc_val = results_df[results_df["Model"]==mname]["ROC AUC"].values[0]
+        
+        # COMPACT OPTIMIZATION: Matches the 2.5-inch compact height baseline
+        fig, ax = plt.subplots(figsize=(5, 2.5))
+        ax.plot([0, 1], [0, 1], "--", color="#444", linewidth=0.8, label="Baseline")
+        
+        for mname, (fpr, tpr) in roc_data.items():
+            auc_val = results_df[results_df["Model"] == mname]["ROC AUC"].values[0]
             is_active = (mname == _active_model_name)
-            lw = 2.8 if is_active else 1.0
-            alpha = 1.0 if is_active else 0.45
+            lw = 2.2 if is_active else 0.8
+            alpha = 1.0 if is_active else 0.35
             label_s = mname.split("(")[0].strip()
-            ax.plot(fpr,tpr,color=PALETTE.get(mname,"#888"),linewidth=lw,alpha=alpha,
+            ax.plot(fpr, tpr, color=PALETTE.get(mname, "#888"), linewidth=lw, alpha=alpha,
                     label=f"{label_s} ({auc_val:.3f})")
-        ax.set_xlabel("False Positive Rate",fontsize=8)
-        ax.set_ylabel("True Positive Rate",fontsize=8)
-        ax.set_title("ROC Curves",fontsize=9)
-        ax.legend(fontsize=6,facecolor="#111827",labelcolor="#F0F4FF",framealpha=0.9,loc="lower right")
-        apply_dark_style(fig,[ax])
-        st.pyplot(fig,use_container_width=True)
+        
+        # Layout tuning for minimal padding footprint
+        ax.set_xlabel("False Positive Rate", fontsize=7, labelpad=2)
+        ax.set_ylabel("True Positive Rate", fontsize=7, labelpad=2)
+        ax.tick_params(axis='both', which='major', labelsize=7, pad=2)
+        
+        # Clean background legend container
+        ax.legend(fontsize=5.5, facecolor="#111827", labelcolor="#F0F4FF", framealpha=0.8, 
+                loc="lower right", borderpad=0.3, labelspacing=0.2)
+        
+        fig.tight_layout(pad=0.2)
+        apply_dark_style(fig, [ax])
+        st.pyplot(fig, use_container_width=True)
         plt.close(fig)
 
     st.divider()
@@ -1086,24 +1194,35 @@ if page == "📈 AI Model Intelligence":
         st.markdown("**Recall vs Precision — all models**")
         models_short = [m.replace(" (Recall-Tuned)"," ★").replace(" (Default)","") for m in results_df["Model"]]
         x = np.arange(len(models_short)); w = 0.36
-        fig, ax = plt.subplots(figsize=(5, 3.5))
+        
+        # COMPACT OPTIMIZATION: Reduced vertical height footprint to 2.5
+        fig, ax = plt.subplots(figsize=(5, 2.5))
         b1 = ax.bar(x-w/2, results_df["Recall"].values,    w, color="#2DD4BF", alpha=0.85, label="Recall",    edgecolor="none")
         b2 = ax.bar(x+w/2, results_df["Precision"].values, w, color="#60A5FA", alpha=0.85, label="Precision", edgecolor="none")
+        
         _ai = list(results_df["Model"]).index(_active_model_name) if _active_model_name in list(results_df["Model"]) else -1
         if _ai >= 0:
             for _bset in [b1, b2]:
                 _bset[_ai].set_edgecolor(_active_color)
-                _bset[_ai].set_linewidth(2)
-        ax.axhline(0.80,color="#FBBF24",linewidth=1.2,linestyle="--",label="Recall target")
-        ax.set_xticks(x); ax.set_xticklabels(models_short,fontsize=6,rotation=20,ha="right")
-        ax.set_ylim(0,1.12); ax.set_ylabel("Score",fontsize=8)
-        ax.legend(fontsize=7,facecolor="#111827",labelcolor="#F0F4FF")
-        for bars in [b1,b2]:
+                _bset[_ai].set_linewidth(1.5)
+                
+        ax.axhline(0.80, color="#FBBF24", linewidth=1.0, linestyle="--", label="Recall target")
+        ax.set_xticks(x)
+        ax.set_xticklabels(models_short, fontsize=6, rotation=15, ha="right")
+        ax.set_ylim(0, 1.15)
+        ax.set_ylabel("Score", fontsize=7)
+        ax.tick_params(axis='both', which='major', labelsize=6.5, pad=2)
+        ax.legend(fontsize=6, facecolor="#111827", labelcolor="#F0F4FF", loc="upper left", borderpad=0.3)
+        
+        # Value indicators rendered with micro font sizes
+        for bars in [b1, b2]:
             for bar in bars:
-                ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+0.01,
-                        f"{bar.get_height():.0%}", ha="center", va="bottom", color="#F0F4FF", fontsize=6)
-        apply_dark_style(fig,[ax])
-        st.pyplot(fig,use_container_width=True)
+                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
+                        f"{bar.get_height():.0%}", ha="center", va="bottom", color="#F0F4FF", fontsize=5.5)
+                        
+        fig.tight_layout(pad=0.2)
+        apply_dark_style(fig, [ax])
+        st.pyplot(fig, use_container_width=True)
         plt.close(fig)
 
     with _cm_col:
@@ -1113,68 +1232,68 @@ if page == "📈 AI Model Intelligence":
             ["True Neg\n(Kept)", "False Pos\n(Wrongly flagged)"],
             ["False Neg\n(Missed ❌)", "True Pos\n(Caught ✅)"],
         ]
-        colors_cm = [["#1a2234","#2d1f1f"],["#3d1a1a","#1a3d2b"]]
-        fig, ax = plt.subplots(figsize=(5, 3.5))
+        colors_cm = [["#1a2234", "#2d1f1f"], ["#3d1a1a", "#1a3d2b"]]
+        
+        # COMPACT OPTIMIZATION: Reduced vertical height footprint to 2.5
+        fig, ax = plt.subplots(figsize=(5, 2.5))
         for i in range(2):
             for j in range(2):
-                ax.add_patch(plt.Rectangle((j-0.5,1.5-i),1,1,color=colors_cm[i][j],zorder=0))
+                ax.add_patch(plt.Rectangle((j-0.5, 1.5-i), 1, 1, color=colors_cm[i][j], zorder=0))
                 vc = "#F87171" if (i==1 and j==0) else ("#2DD4BF" if (i==1 and j==1) else "#F0F4FF")
-                ax.text(j,1-i,str(cm[i,j]),ha="center",va="center",fontsize=22,fontweight="bold",color=vc,zorder=2)
-                ax.text(j,1-i-0.33,cm_labels[i][j],ha="center",va="center",fontsize=6.5,color="#8B95A8",zorder=2)
-        ax.set_xlim(-0.5,1.5); ax.set_ylim(-0.5,1.5)
-        ax.set_xticks([0,1]); ax.set_xticklabels(["Predicted: Stay","Predicted: Leave"],fontsize=8)
-        ax.set_yticks([0,1]); ax.set_yticklabels(["Actual: Leave","Actual: Stay"],fontsize=8)
-        ax.set_title(f"@ threshold={_active_thresh:.2f}",fontsize=9,pad=8)
-        apply_dark_style(fig,[ax])
-        for spine in ax.spines.values(): spine.set_visible(False)
-        st.pyplot(fig,use_container_width=True)
+                
+                # Proportional font-scaling & adjusted center placements to prevent box-overflow
+                ax.text(j, 1-i+0.05, str(cm[i,j]), ha="center", va="center", fontsize=16, fontweight="bold", color=vc, zorder=2)
+                ax.text(j, 1-i-0.28, cm_labels[i][j], ha="center", va="center", fontsize=5.5, color="#8B95A8", zorder=2)
+                
+        ax.set_xlim(-0.5, 1.5)
+        ax.set_ylim(-0.5, 1.5)
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(["Predicted: Stay", "Predicted: Leave"], fontsize=7)
+        ax.set_yticks([0, 1])
+        ax.set_yticklabels(["Actual: Leave", "Actual: Stay"], fontsize=7)
+        ax.tick_params(axis='both', which='major', pad=2)
+        ax.set_title(f"@ threshold={_active_thresh:.2f}", fontsize=7.5, pad=4)
+        
+        fig.tight_layout(pad=0.2)
+        apply_dark_style(fig, [ax])
+        for spine in ax.spines.values(): 
+            spine.set_visible(False)
+            
+        st.pyplot(fig, use_container_width=True)
         plt.close(fig)
 
     st.divider()
 
-    _imp_col, _dive_col = st.columns([1, 1])
+    # with _dive_col:
+    #     st.markdown("**Factor Deep-Dive**")
+    #     sel_feat = st.selectbox("Select feature:", ML_FEATURES, key="feat_dive")
+    #     fig, ax = plt.subplots(figsize=(5, 3.8))
+    #     for label, color in [("No","#2DD4BF"),("Yes","#F87171")]:
+    #         vals = filtered_df[filtered_df["Attrition"]==label][sel_feat].dropna()
+    #         ax.hist(vals,bins=22,alpha=0.6,color=color,label=f"Attrition:{label}",edgecolor="none")
+    #     ax.legend(fontsize=7,facecolor="#111827",labelcolor="#F0F4FF")
+    #     ax.set_xlabel(sel_feat,fontsize=8)
+    #     ax.set_title(f"{sel_feat} by Attrition",fontsize=9)
+    #     apply_dark_style(fig,[ax])
+    #     st.pyplot(fig,use_container_width=True)
+    #     plt.close(fig)
 
-    with _imp_col:
-        st.markdown("**Feature Importance — active model**")
-        if hasattr(_active_clf, "feature_importances_"):
-            _imp_vals = _active_clf.feature_importances_
-        elif hasattr(_active_clf, "coef_"):
-            _imp_vals = np.abs(_active_clf.coef_[0])
-        else:
-            _imp_vals = np.ones(len(ML_FEATURES)) / len(ML_FEATURES)
-        importances = pd.Series(_imp_vals, index=ML_FEATURES).sort_values(ascending=True)
-        colors_imp  = [ACCENT_PALETTE[i % len(ACCENT_PALETTE)] for i in range(len(importances))]
-        colors_imp[-1] = _active_color
+    # with st.expander("🔥 Correlation Heatmap", expanded=False):
+    #     num_cols = filtered_df.select_dtypes(include=np.number).columns.tolist()
+    #     if len(num_cols) >= 2:
+    #         corr = filtered_df[num_cols[:12]].corr()
+    #         fig, ax = plt.subplots(figsize=(9, 6))
+    #         mask = np.triu(np.ones_like(corr, dtype=bool))
+    #         sns.heatmap(corr, mask=mask, ax=ax, cmap="coolwarm", center=0,
+    #                     linewidths=0.3, linecolor="#0D1117",
+    #                     annot=True, fmt=".2f", annot_kws={"size":6,"color":"#F0F4FF"},
+    #                     cbar_kws={"shrink":0.7})
+    #         ax.set_title("Feature Correlation Matrix",color="#F0F4FF",fontsize=9)
+    #         apply_dark_style(fig,[ax])
+    #         st.pyplot(fig,use_container_width=True)
+    #         plt.close(fig)
 
-        fig, ax = plt.subplots(figsize=(5, 3.8))
-        bars_imp = ax.barh(importances.index, importances.values, color=colors_imp, edgecolor="none", height=0.55)
-        ax.set_xlabel("Importance",fontsize=8)
-        ax.set_title("Feature Importance",fontsize=9)
-        for bar, val in zip(bars_imp, importances.values):
-            ax.text(val+0.0005,bar.get_y()+bar.get_height()/2,f"{val:.3f}",va="center",color="#F0F4FF",fontsize=7)
-        apply_dark_style(fig,[ax])
-        st.pyplot(fig,use_container_width=True)
-        plt.close(fig)
-
-        top3 = importances.sort_values(ascending=False).head(3)
-        pills = "".join(f"<span class='insight-pill'>🔑 {f} ({v:.1%})</span>" for f,v in top3.items())
-        st.markdown(pills, unsafe_allow_html=True)
-
-    with _dive_col:
-        st.markdown("**Factor Deep-Dive**")
-        sel_feat = st.selectbox("Select feature:", ML_FEATURES, key="feat_dive")
-        fig, ax = plt.subplots(figsize=(5, 3.8))
-        for label, color in [("No","#2DD4BF"),("Yes","#F87171")]:
-            vals = filtered_df[filtered_df["Attrition"]==label][sel_feat].dropna()
-            ax.hist(vals,bins=22,alpha=0.6,color=color,label=f"Attrition:{label}",edgecolor="none")
-        ax.legend(fontsize=7,facecolor="#111827",labelcolor="#F0F4FF")
-        ax.set_xlabel(sel_feat,fontsize=8)
-        ax.set_title(f"{sel_feat} by Attrition",fontsize=9)
-        apply_dark_style(fig,[ax])
-        st.pyplot(fig,use_container_width=True)
-        plt.close(fig)
-
-    st.divider()
+    # st.divider()
 
     st.markdown("#### 🎚 Live Threshold Tuner")
     st.markdown("""
@@ -1224,53 +1343,10 @@ if page == "📈 AI Model Intelligence":
         unsafe_allow_html=True
     )
 
-    with st.expander("📖 Why Recall over Accuracy / Precision?", expanded=False):
-        _ra, _rb = st.columns(2)
-        with _ra:
-            st.markdown("""
-<div style='background:#111827;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px 18px'>
-<div style='font-size:0.72rem;color:#8B95A8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px'>The Core Problem</div>
-<p style='color:#F0F4FF;font-size:0.88rem;line-height:1.6'>
-Missing a leaver costs <b style='color:#F87171'>50–200% of annual salary</b> in replacement,
-lost knowledge, and team disruption. A false alarm costs one retention conversation.
-</p>
-<p style='color:#8B95A8;font-size:0.8rem;margin-top:8px'>
-We therefore tune the threshold to maximise recall ≥ 80%, accepting some false positives.
-</p>
-</div>""", unsafe_allow_html=True)
-        with _rb:
-            st.markdown("""
-<div style='background:#111827;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px 18px'>
-<table style='width:100%;border-collapse:collapse;font-size:0.78rem'>
-<tr style='border-bottom:1px solid rgba(255,255,255,0.07)'>
-  <th style='color:#8B95A8;padding:5px 7px;text-align:left'>Metric</th>
-  <th style='color:#8B95A8;padding:5px 7px;text-align:left'>Risk</th>
-</tr>
-<tr><td style='color:#FBBF24;padding:5px 7px;font-weight:600'>Accuracy</td>
-    <td style='color:#8B95A8;padding:5px 7px'>Misleading on 84/16 imbalanced classes</td></tr>
-<tr><td style='color:#60A5FA;padding:5px 7px;font-weight:600'>Precision</td>
-    <td style='color:#8B95A8;padding:5px 7px'>Makes model conservative — misses real leavers</td></tr>
-<tr><td style='color:#A78BFA;padding:5px 7px;font-weight:600'>F1 Score</td>
-    <td style='color:#8B95A8;padding:5px 7px'>Treats both error types equally — wrong tradeoff</td></tr>
-<tr><td style='color:#2DD4BF;padding:5px 7px;font-weight:700'>✅ Recall</td>
-    <td style='color:#2DD4BF;padding:5px 7px;font-weight:600'>Minimises missed leavers — PRIMARY GOAL</td></tr>
-</table>
-</div>""", unsafe_allow_html=True)
-
-    with st.expander("🔥 Correlation Heatmap", expanded=False):
-        num_cols = filtered_df.select_dtypes(include=np.number).columns.tolist()
-        if len(num_cols) >= 2:
-            corr = filtered_df[num_cols[:12]].corr()
-            fig, ax = plt.subplots(figsize=(9, 6))
-            mask = np.triu(np.ones_like(corr, dtype=bool))
-            sns.heatmap(corr, mask=mask, ax=ax, cmap="coolwarm", center=0,
-                        linewidths=0.3, linecolor="#0D1117",
-                        annot=True, fmt=".2f", annot_kws={"size":6,"color":"#F0F4FF"},
-                        cbar_kws={"shrink":0.7})
-            ax.set_title("Feature Correlation Matrix",color="#F0F4FF",fontsize=9)
-            apply_dark_style(fig,[ax])
-            st.pyplot(fig,use_container_width=True)
-            plt.close(fig)
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
 
 elif page == "👥 Employees to Review":
     st.markdown("""
@@ -1391,7 +1467,12 @@ elif page == "👥 Employees to Review":
     with col_dl2:
         st.caption(f"📄 {len(csv_export):,} employees · {len(csv_export.columns)} columns")
 
-elif page == "🔮 Predict Employee":
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+
+elif page == "🔮 Risk Predictor [Beta]":
     st.markdown("""
     <div class='page-header'>
         <h1>🔮 Individual Risk Predictor</h1>
@@ -1483,6 +1564,10 @@ elif page == "🔮 Predict Employee":
             for r in recs:
                 st.markdown(f"- {r}")
 
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
 
 elif page == "📊 Executive Summary":
     st.header("📊 Executive Summary Dashboard (Active Headcount Engine)")
@@ -1753,7 +1838,10 @@ elif page == "📊 Executive Summary":
             disp['Attrition_Rate_Percent'] = disp['Attrition_Rate_Percent'].map('{:,.2f}%'.format)
             st.dataframe(disp.drop(columns=['Sort_Key'], errors='ignore'), use_container_width=True)
 
-
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
 
 elif page == "🎯 Attrition Drivers":
     st.header("🎯 Resignation Drivers Analysis")
@@ -2436,7 +2524,10 @@ elif page == "🎯 Attrition Drivers":
 
                         st.dataframe(display_records, use_container_width=True, height=420)
 
-
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
 
 elif page == "⚖️ Wellbeing/Performance":
     st.header("⚖️ Wellbeing & Performance Matrix")
@@ -2736,7 +2827,10 @@ elif page == "⚖️ Wellbeing/Performance":
                     st.pyplot(fig, use_container_width=True)
                     plt.close()
 
-
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------------------------------------------------------------
 
 elif page == "💰 Attrition Simulator":
     st.header("📊 Attrition Financial Risk Indicator")
