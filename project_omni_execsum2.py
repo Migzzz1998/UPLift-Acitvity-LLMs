@@ -1619,15 +1619,15 @@ elif page == "Executive Summary":
             total_ever_served = current_headcount + total_period_attrition
             attrition_rate_val = (total_period_attrition / total_ever_served * 100) if total_ever_served > 0 else 0.0
 
-            with kpi_col1:
+            with kpi_col2:
                 metric_card("Active Headcount", f"{int(current_headcount):,}", "Active staff at end of selected window",
                             progress=current_headcount/total_ever_served if total_ever_served > 0 else 0,
                             progress_label=f"{current_headcount/total_ever_served:.0%} of total ever served" if total_ever_served > 0 else "")
-            with kpi_col2:
+            with kpi_col3:
                 metric_card("Total Window Departures", f"{int(total_period_attrition):,}", "Employees who left during the selected period",
                             progress=total_period_attrition/total_ever_served if total_ever_served > 0 else 0,
                             progress_label=f"{total_period_attrition/total_ever_served:.0%} of total ever served" if total_ever_served > 0 else "")
-            with kpi_col3:
+            with kpi_col1:
                 metric_card("Period Attrition Rate", f"{attrition_rate_val:.2f}%", "Share of total workforce that resigned in this window",
                             progress=min(attrition_rate_val/100, 1.0),
                             progress_label="Resignation share within selected period")
