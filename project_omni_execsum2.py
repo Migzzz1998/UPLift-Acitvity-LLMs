@@ -28,9 +28,6 @@ from sklearn.inspection import permutation_importance
 import warnings
 warnings.filterwarnings('ignore')
 
-# ============================================================
-# SCHEMA + DEFAULT DATASET (from Project Omni)
-# ============================================================
 EXPECTED_SCHEMA = {
     "Company": "object", "Age": "object", "Attrition": "object", "BusinessTravel": "object",
     "DailyRate": "int64", "Department": "object", "DistanceFromHome": "int64", "Education": "int64",
@@ -80,9 +77,6 @@ def get_default_dataset():
     df['Exit_Date'] = pd.to_datetime(df['Exit_Date'], errors='coerce')
     return df
 
-# ============================================================
-# 1. GLOBAL PAGE CONFIG & DARK MODE THEME
-# ============================================================
 st.set_page_config(
     page_title="Intelligent Retention Analytics",
     layout="wide",
@@ -507,9 +501,6 @@ div[data-baseweb="slider"] div[class*="Track"] > div:first-child {
 """
 st.markdown(DARK_CSS, unsafe_allow_html=True)
 
-# ============================================================
-# 2. MATPLOTLIB DARK THEME HELPER
-# ============================================================
 def apply_dark_style(fig, ax_list=None):
     """Apply consistent dark theme to matplotlib figures."""
     BG = "#111827"
@@ -532,9 +523,6 @@ def apply_dark_style(fig, ax_list=None):
 
 ACCENT_PALETTE = ["#60A5FA", "#A78BFA", "#2DD4BF", "#F87171", "#FBBF24", "#34D399", "#F472B6"]
 
-# ============================================================
-# 2b. PROJECT OMNI CHART STYLE HELPERS
-# ============================================================
 def style_dark_axis(ax):
     """Projectomni standard chart style — used for all Omni pages."""
     ax.set_facecolor("#111827")
@@ -616,9 +604,6 @@ def metric_card(label, value, subtext="", progress=None, progress_label="",
     )
     st.markdown(html, unsafe_allow_html=True)
 
-# ============================================================
-# 3. DATA LOADING & CACHING
-# ============================================================
 @st.cache_data(show_spinner="Loading dataset…")
 def load_data():
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -626,7 +611,6 @@ def load_data():
     if os.path.exists(path):
         df = pd.read_csv(path)
         return df
-    # ── Fallback: generate realistic synthetic data so the UI is always renderable ──
     np.random.seed(42)
     n = 1200
     depts = ["Engineering", "Sales", "HR", "Finance", "Marketing"]
@@ -663,7 +647,6 @@ def get_trained_model(df_hash):
     df_ml = df.copy()
     df_ml["Attrition_bin"] = (df_ml["Attrition"] == "Yes").astype(int)
 
-    # Encode OverTime if present
     if "OverTime" in df_ml.columns:
         df_ml["OverTime_enc"] = (df_ml["OverTime"] == "Yes").astype(int)
     else:
@@ -687,9 +670,6 @@ def get_trained_model(df_hash):
     }
     return model, FEATURES, metrics
 
-# ============================================================
-# 3b. MULTI-MODEL COMPARISON (Recall-focused)
-# ============================================================
 @st.cache_resource(show_spinner="Benchmarking all models...")
 def run_model_comparison(df_hash):
     df = st.session_state["_df"]
@@ -715,7 +695,6 @@ def run_model_comparison(df_hash):
      y_tr, y_te) = train_test_split(X, X_scaled, y,
                                      test_size=0.2, random_state=42, stratify=y)
 
-    # Tune threshold on RF to maximise recall >= 0.80
     rf_base = RandomForestClassifier(n_estimators=200, max_depth=10,
                                      class_weight="balanced", random_state=42, n_jobs=-1)
     rf_base.fit(X_tr, y_tr)
@@ -772,20 +751,12 @@ def run_model_comparison(df_hash):
     return (results_df, trained_models, best_name, best_model_obj,
             best_thresh_val, FEATS, scaler, y_te, roc_data)
 
-# ============================================================
-# 4. LOAD DATA + SESSION STATE
-# ============================================================
 df = load_data()
 
 st.session_state["_df"] = df
 model, FEATURES, model_metrics = get_trained_model(hash(str(df.shape)))
 
-# ============================================================
-# 5. SIDEBAR
-# ============================================================
-# ── Model catalogue (drives the selector) ──
 MODEL_CATALOGUE = {
-    # ── Recall-tuned champion ──
     "🌲 Random Forest (Recall-Tuned)": {
         "clf": lambda: RandomForestClassifier(n_estimators=200, max_depth=10,
                         class_weight="balanced", random_state=42, n_jobs=-1),
@@ -794,7 +765,6 @@ MODEL_CATALOGUE = {
         "tag_color": "#2DD4BF",
         "desc": "Threshold tuned on Precision-Recall curve to hit ≥80% recall. Best for catching at-risk employees.",
     },
-    # ── Ensemble family ──
     "🌲 Random Forest (Default)": {
         "clf": lambda: RandomForestClassifier(n_estimators=150, max_depth=8,
                         random_state=42, n_jobs=-1),
@@ -827,7 +797,6 @@ MODEL_CATALOGUE = {
         "tag_color": "#F472B6",
         "desc": "Adaptive boosting. Focuses on hard-to-classify cases iteratively.",
     },
-    # ── Linear / distance family ──
     "📐 Logistic Regression": {
         "clf": lambda: LogisticRegression(max_iter=1000, class_weight="balanced",
                         random_state=42),
@@ -844,7 +813,6 @@ MODEL_CATALOGUE = {
         "tag_color": "#FB923C",
         "desc": "Support vector machine with RBF kernel. Powerful on mid-sized datasets.",
     },
-    # ── Tree family ──
     "🌿 Decision Tree": {
         "clf": lambda: DecisionTreeClassifier(max_depth=6, class_weight="balanced",
                         random_state=42),
@@ -856,7 +824,6 @@ MODEL_CATALOGUE = {
 }
 
 with st.sidebar:
-    # ── Brand ──
     st.markdown("""
     <div class='sidebar-brand'>
         <div class='brand-icon-wrap'>🛡️</div>
@@ -867,19 +834,17 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Navigation ──
     st.markdown("<div class='nav-section-label'>Navigation</div>", unsafe_allow_html=True)
     page = st.radio(
         "NAVIGATION",
         ["📊 Executive Summary", "🎯 Attrition Drivers", "⚖️ Wellbeing/Performance",
-         "📈 Predictive Analytics", "👥 Employees to Review", "🔮 Predict Employee",
-         "💰 Attrition Simulator", "🏆 Model Lab"],
+         "📈 AI Model Intelligence", "👥 Employees to Review", "🔮 Predict Employee",
+         "💰 Attrition Simulator"],
         label_visibility="collapsed",
     )
 
     st.divider()
 
-    # ── Active Model Selector ──
     st.markdown("<div class='nav-section-label'>Active Model</div>", unsafe_allow_html=True)
     selected_model_name = st.selectbox(
         "Active Model",
@@ -903,7 +868,6 @@ with st.sidebar:
 
     st.divider()
 
-    # ── Filters ──
     st.markdown("<div class='nav-section-label'>Filters</div>", unsafe_allow_html=True)
     with st.expander("🎚 Global Filters", expanded=False):
         companies = ["All"] + sorted(df["Company"].unique().tolist()) if "Company" in df.columns else ["All"]
@@ -922,7 +886,6 @@ with st.sidebar:
         else:
             inc_range = (0, 99999)
 
-    # Apply filters
     filtered_df = df.copy()
     if sel_company != "All" and "Company" in df.columns:
         filtered_df = filtered_df[filtered_df["Company"] == sel_company]
@@ -935,7 +898,6 @@ with st.sidebar:
 
     st.divider()
 
-    # ── Status pill ──
     st.markdown(f"""
     <div class='status-pill'>
         <div class='status-dot'></div>
@@ -966,7 +928,6 @@ with st.sidebar:
             use_container_width=True,
         )
 
-# ── Resolve user_df from upload or analytics df ──
 user_df = df.copy() if df is not None else get_default_dataset()
 if uploaded_file is not None:
     try:
@@ -986,9 +947,6 @@ if df is None:
     st.error("🚨 Dataset missing. Place HR_Attrition_MultiCompany.csv in the 'Final Data Clean' folder.")
     st.stop()
 
-# ============================================================
-# HELPER: KPI Card HTML
-# ============================================================
 def kpi_card(icon, label, value, sub, badge_text="", badge_class="badge-neu"):
     badge_html = f"<span class='kpi-badge {badge_class}'>{badge_text}</span>" if badge_text else ""
     return f"""
@@ -1006,18 +964,12 @@ def risk_color(pct):
     if pct >= 40: return "#FBBF24", "medium"
     return "#2DD4BF", "low"
 
-# ============================================================
-# PAGE 1 ── DASHBOARD
-# ============================================================
 if page == "📈 AI Model Intelligence":
-    # ── Run model comparison keyed to active model selection ──
     with st.spinner("Training & benchmarking models…"):
         (results_df, trained_models, best_name, best_model_obj,
          best_thresh_val, ML_FEATURES, scaler, y_te, roc_data) = run_model_comparison(hash(str(df.shape)))
 
-    # Active model from sidebar selector
     _sel_key = selected_model_name  # sidebar selectbox value
-    # Map sidebar catalogue name → leaderboard model name
     _name_map = {
         "🌲 Random Forest (Recall-Tuned)": "Random Forest (Recall-Tuned)",
         "🌲 Random Forest (Default)":      "Random Forest (Default)",
@@ -1029,7 +981,6 @@ if page == "📈 AI Model Intelligence":
         "🌿 Decision Tree":                "Decision Tree",
     }
     _active_model_name = _name_map.get(_sel_key, best_name)
-    # Fall back to best if selected not in trained set
     if _active_model_name not in trained_models:
         _active_model_name = best_name
 
@@ -1048,7 +999,6 @@ if page == "📈 AI Model Intelligence":
     }
     _active_color = PALETTE.get(_active_model_name, "#60A5FA")
 
-    # ── Page Header ──
     st.markdown(f"""
     <div class='page-header'>
         <h1>📈 AI Model Intelligence</h1>
@@ -1059,7 +1009,6 @@ if page == "📈 AI Model Intelligence":
     </div>
     """, unsafe_allow_html=True)
 
-    # ── SECTION 1: Active Model KPIs ──
     st.markdown("#### Active Model Performance")
     k1, k2, k3, k4, k5 = st.columns(5)
     for col, label, val, delta in [
@@ -1073,7 +1022,6 @@ if page == "📈 AI Model Intelligence":
 
     st.divider()
 
-    # ── SECTION 2: Leaderboard + ROC side by side ──
     _lb_col, _roc_col = st.columns([1.1, 0.9])
 
     with _lb_col:
@@ -1132,7 +1080,6 @@ if page == "📈 AI Model Intelligence":
 
     st.divider()
 
-    # ── SECTION 3: Recall/Precision bars + Confusion Matrix ──
     _bar_col, _cm_col = st.columns(2)
 
     with _bar_col:
@@ -1142,7 +1089,6 @@ if page == "📈 AI Model Intelligence":
         fig, ax = plt.subplots(figsize=(5, 3.5))
         b1 = ax.bar(x-w/2, results_df["Recall"].values,    w, color="#2DD4BF", alpha=0.85, label="Recall",    edgecolor="none")
         b2 = ax.bar(x+w/2, results_df["Precision"].values, w, color="#60A5FA", alpha=0.85, label="Precision", edgecolor="none")
-        # Highlight active model bars
         _ai = list(results_df["Model"]).index(_active_model_name) if _active_model_name in list(results_df["Model"]) else -1
         if _ai >= 0:
             for _bset in [b1, b2]:
@@ -1186,12 +1132,10 @@ if page == "📈 AI Model Intelligence":
 
     st.divider()
 
-    # ── SECTION 4: Feature Importance + Factor Deep-Dive ──
     _imp_col, _dive_col = st.columns([1, 1])
 
     with _imp_col:
         st.markdown("**Feature Importance — active model**")
-        # Use feature importances if available, else coefficients
         if hasattr(_active_clf, "feature_importances_"):
             _imp_vals = _active_clf.feature_importances_
         elif hasattr(_active_clf, "coef_"):
@@ -1200,7 +1144,6 @@ if page == "📈 AI Model Intelligence":
             _imp_vals = np.ones(len(ML_FEATURES)) / len(ML_FEATURES)
         importances = pd.Series(_imp_vals, index=ML_FEATURES).sort_values(ascending=True)
         colors_imp  = [ACCENT_PALETTE[i % len(ACCENT_PALETTE)] for i in range(len(importances))]
-        # Highlight active-model colour on top bar
         colors_imp[-1] = _active_color
 
         fig, ax = plt.subplots(figsize=(5, 3.8))
@@ -1233,7 +1176,6 @@ if page == "📈 AI Model Intelligence":
 
     st.divider()
 
-    # ── SECTION 5: Live Threshold Tuner ──
     st.markdown("#### 🎚 Live Threshold Tuner")
     st.markdown("""
     <div class='section-note'>
@@ -1267,7 +1209,6 @@ if page == "📈 AI Model Intelligence":
     st.pyplot(fig,use_container_width=True)
     plt.close(fig)
 
-    # Plain-language summary
     rec_val = recall_score(y_te,preds_tuned,zero_division=0)
     pre_val = precision_score(y_te,preds_tuned,zero_division=0)
     flagged = int(preds_tuned.sum())
@@ -1283,7 +1224,6 @@ if page == "📈 AI Model Intelligence":
         unsafe_allow_html=True
     )
 
-    # ── SECTION 6: Why Recall (collapsible) ──
     with st.expander("📖 Why Recall over Accuracy / Precision?", expanded=False):
         _ra, _rb = st.columns(2)
         with _ra:
@@ -1317,7 +1257,6 @@ We therefore tune the threshold to maximise recall ≥ 80%, accepting some false
 </table>
 </div>""", unsafe_allow_html=True)
 
-    # ── Correlation Heatmap (collapsible) ──
     with st.expander("🔥 Correlation Heatmap", expanded=False):
         num_cols = filtered_df.select_dtypes(include=np.number).columns.tolist()
         if len(num_cols) >= 2:
@@ -1348,7 +1287,6 @@ elif page == "👥 Employees to Review":
     </div>
     """, unsafe_allow_html=True)
 
-    # Score all active employees
     active_df = filtered_df[filtered_df["Attrition"] == "No"].copy()
     if "OverTime" in active_df.columns:
         active_df["OverTime_enc"] = (active_df["OverTime"] == "Yes").astype(int)
@@ -1359,7 +1297,6 @@ elif page == "👥 Employees to Review":
     X_active = active_df[available_features].fillna(active_df[available_features].median())
     active_df["Risk_Probability"] = model.predict_proba(X_active)[:, 1]
 
-    # ── Controls ──
     col_ctrl1, col_ctrl2 = st.columns([2, 1])
     with col_ctrl1:
         n_show = st.slider("Employees to display", 4, min(50, len(active_df)), 12, step=4)
@@ -1375,7 +1312,6 @@ elif page == "👥 Employees to Review":
         top_risk = top_risk[top_risk["Risk_Probability"] < 0.40]
     top_risk = top_risk.head(n_show)
 
-    # ── Risk Cards in 3-column grid ──
     id_col  = "EmployeeNumber" if "EmployeeNumber" in active_df.columns else active_df.columns[0]
     role_col = "JobRole"        if "JobRole"        in active_df.columns else active_df.columns[1]
     dept_col = "Department"     if "Department"     in active_df.columns else ""
@@ -1405,7 +1341,6 @@ elif page == "👥 Employees to Review":
 
     st.divider()
 
-    # ── Risk Distribution Summary ──
     st.subheader("Risk Distribution")
     all_risk = active_df["Risk_Probability"] * 100
     high_n   = (all_risk >= 70).sum()
@@ -1429,7 +1364,6 @@ elif page == "👥 Employees to Review":
     st.pyplot(fig, use_container_width=True)
     plt.close(fig)
 
-    # ── Download — include Company after Emp ID ──
     export_cols = [id_col]
     if "Company" in top_risk.columns:
         export_cols.append("Company")
@@ -1441,7 +1375,6 @@ elif page == "👥 Employees to Review":
 
     csv_export = top_risk[export_cols].copy()
     csv_export["Risk_Probability"] = csv_export["Risk_Probability"].map(lambda x: f"{x:.2%}")
-    # Composite ID: EmpNumber-CompanyCode for unique identification
     if "Company" in csv_export.columns:
         company_code = csv_export["Company"].str[:3].str.upper()
         csv_export.insert(0, "Employee_ID", csv_export[id_col].astype(str) + "-" + company_code)
@@ -1458,10 +1391,7 @@ elif page == "👥 Employees to Review":
     with col_dl2:
         st.caption(f"📄 {len(csv_export):,} employees · {len(csv_export.columns)} columns")
 
-# ============================================================
-# PAGE 4 ── PREDICT INDIVIDUAL EMPLOYEE
-# ============================================================
-elif page == "🔮 Attrition Simulator":
+elif page == "🔮 Predict Employee":
     st.markdown("""
     <div class='page-header'>
         <h1>🔮 Individual Risk Predictor</h1>
@@ -1522,7 +1452,6 @@ elif page == "🔮 Attrition Simulator":
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Factor Contribution mini chart ──
         st.markdown("**What's driving this score?**")
         importance_vals = pd.Series(model.feature_importances_, index=FEATURES)
         top_factors = importance_vals.sort_values(ascending=False).head(5)
@@ -1537,7 +1466,6 @@ elif page == "🔮 Attrition Simulator":
         st.pyplot(fig, use_container_width=True)
         plt.close(fig)
 
-        # ── Actionable recommendations ──
         recs = []
         if overtime == "Yes":
             recs.append("🕐 **Reduce overtime** — overtime is a top predictor of attrition.")
@@ -1555,355 +1483,145 @@ elif page == "🔮 Attrition Simulator":
             for r in recs:
                 st.markdown(f"- {r}")
 
-# ============================================================
-# ATTRITION SIMULATOR — appended to Predict Employee page
-# ============================================================
 
 elif page == "📊 Executive Summary":
     st.header("📊 Executive Summary Dashboard (Active Headcount Engine)")
     st.markdown("---")
 
     df_exec = user_df.copy()
-
-    # Standardize data types and dates across the workspace
     df_exec['Hire_Date'] = pd.to_datetime(df_exec['Hire_Date'], errors='coerce')
     df_exec['Exit_Date'] = pd.to_datetime(df_exec['Exit_Date'], errors='coerce')
-    
-    # Drop rows without a valid hire date to preserve pipeline security
     df_exec = df_exec[df_exec['Hire_Date'].notna()]
 
-    # =========================================================================
-    # --- FILTERS ROW ---
-    # =========================================================================
     filter_col1, filter_col2 = st.columns(2)
-
     with filter_col1:
         company_options = ["All"] + sorted(df_exec['Company'].dropna().unique().tolist())
         selected_company = st.selectbox("Select Company Focus:", company_options)
-
     if selected_company != "All":
         df_exec = df_exec[df_exec['Company'] == selected_company]
 
-    # Check if data exists after applying company filter
     if df_exec.empty:
         st.warning("⚠️ No employee records match the selected company.")
     else:
-        # Generate the complete dynamic year range based on actual dataset bounds safely
         min_year = int(df_exec['Hire_Date'].dt.year.min())
         max_hire_year = df_exec['Hire_Date'].dt.year.max()
-        max_exit_year = df_exec['Exit_Date'].dt.year.max()
+        _exit_parsed = pd.to_datetime(df_exec['Exit_Date'], errors='coerce')
+        max_exit_year = _exit_parsed.dt.year.max()
         max_year = int(max(max_hire_year, max_exit_year) if pd.notna(max_exit_year) else max_hire_year)
-        
-        # Complete list of available years sorted descending (most recent first)
         available_years = sorted(list(range(min_year, max_year + 1)), reverse=True)
-        
+
         with filter_col2:
-            # Default selection automatically set to the past 5 years
             default_years = available_years[:5]
-            selected_years = st.multiselect(
-                "Select View Analysis Years (Multi-Select):", 
-                options=available_years, 
-                default=default_years
-            )
+            selected_years = st.multiselect("Select Analysis Years:", options=available_years, default=default_years)
 
-        # Handle case where no years are selected
         if not selected_years:
-            st.warning("⚠️ Please select at least one year to view the analytics summary.")
+            st.warning("⚠️ Please select at least one year.")
         else:
-            # =========================================================================
-            # --- ACTIVE HEADCOUNT SNAPSHOT ENGINE ---
-            # =========================================================================
-            months_bridge = []
-            all_departures = []
-            
-            import altair as alt
-
-            # Sort selected years chronologically (ascending) for the timeline view
+            months_bridge, all_departures = [], []
             chronological_years = sorted(selected_years)
-            
+
             for yr in chronological_years:
                 for month_idx in range(1, 13):
                     month_start = pd.Timestamp(year=yr, month=month_idx, day=1)
-                    month_end = month_start + pd.offsets.MonthEnd(0)
-                    
+                    month_end   = month_start + pd.offsets.MonthEnd(0)
                     active_mask = (df_exec['Hire_Date'] <= month_end) & (
-                        (df_exec['Exit_Date'].isna()) | (df_exec['Exit_Date'] > month_start)
-                    )
-                    df_active_this_month = df_exec[active_mask]
-                    
-                    new_hires_count = len(df_active_this_month[
-                        (df_active_this_month['Hire_Date'] >= month_start) & (df_active_this_month['Hire_Date'] <= month_end)
-                    ])
-                    
-                    # Capture exact departures matching the filter scope timeline
-                    left_mask = (df_active_this_month['Attrition'].astype(str).str.strip().str.lower() == 'yes') & \
-                                (df_active_this_month['Exit_Date'] >= month_start) & \
-                                (df_active_this_month['Exit_Date'] <= month_end)
-                    df_left_this_month = df_active_this_month[left_mask]
-                    
-                    if not df_left_this_month.empty:
-                        all_departures.append(df_left_this_month)
-                    
-                    attrition_count = len(df_left_this_month)
-                    active_total = len(df_active_this_month)
-                    monthly_attrition_rate = (attrition_count / active_total * 100) if active_total > 0 else 0.0
-                    
-                    # Format dynamic timeline tags
-                    if len(selected_years) == 1:
-                        display_label = month_start.strftime('%B')
-                        sort_value = month_idx
-                    else:
-                        display_label = month_start.strftime('%Y-%m')
-                        sort_value = month_start
-                        
-                    months_bridge.append({
-                        'Month_Identifier': display_label,
-                        'Sort_Key': sort_value,
-                        'Active_Headcount': active_total,
-                        'New_Hires': new_hires_count,
-                        'Attrition_Departures': attrition_count,
-                        'Attrition_Rate_Percent': monthly_attrition_rate
-                    })
-                    
-            timeline_summary_df = pd.DataFrame(months_bridge)
-            
-            # Reconstruct consolidated departure dataframe for category breakdowns
+                        (df_exec['Exit_Date'].isna()) | (df_exec['Exit_Date'] > month_start))
+                    df_active = df_exec[active_mask]
+                    new_hires  = len(df_active[(df_active['Hire_Date'] >= month_start) & (df_active['Hire_Date'] <= month_end)])
+                    left_mask  = (df_active['Attrition'].astype(str).str.strip().str.lower() == 'yes') & \
+                                 (df_active['Exit_Date'] >= month_start) & (df_active['Exit_Date'] <= month_end)
+                    df_left    = df_active[left_mask]
+                    if not df_left.empty:
+                        all_departures.append(df_left)
+                    attrition_count = len(df_left)
+                    active_total    = len(df_active)
+                    monthly_rate    = (attrition_count / active_total * 100) if active_total > 0 else 0.0
+                    display_label   = month_start.strftime('%B') if len(selected_years) == 1 else month_start.strftime('%Y-%m')
+                    sort_value      = month_idx if len(selected_years) == 1 else month_start
+                    months_bridge.append({'Month_Identifier': display_label, 'Sort_Key': sort_value,
+                                          'Active_Headcount': active_total, 'New_Hires': new_hires,
+                                          'Attrition_Departures': attrition_count, 'Attrition_Rate_Percent': monthly_rate})
+
+            timeline_df = pd.DataFrame(months_bridge)
             df_departures_period = pd.concat(all_departures, ignore_index=True) if all_departures else pd.DataFrame()
-            
+
             x_axis_field = 'Month_Identifier:O'
-            x_axis_sort = alt.EncodingSortField(field='Sort_Key', order='ascending')
+            x_axis_sort  = alt.EncodingSortField(field='Sort_Key', order='ascending')
             x_axis_title = 'Timeline' if len(selected_years) > 1 else f'Calendar Months ({chronological_years[0]})'
 
-            # =========================================================================
-            # --- KPI BOXES LAYER ---
-            # =========================================================================
-            st.markdown(f"### Key Performance Indicators Summary")
+            st.markdown("### Key Performance Indicators")
             kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
-
-            current_headcount = timeline_summary_df.iloc[-1]['Active_Headcount']
-            total_period_attrition = timeline_summary_df['Attrition_Departures'].sum()
-            
+            current_headcount = timeline_df.iloc[-1]['Active_Headcount']
+            total_period_attrition = timeline_df['Attrition_Departures'].sum()
             total_ever_served = current_headcount + total_period_attrition
-            attrition_rate = (total_period_attrition / total_ever_served * 100) if total_ever_served > 0 else 0.0
+            attrition_rate_val = (total_period_attrition / total_ever_served * 100) if total_ever_served > 0 else 0.0
 
             with kpi_col1:
-                metric_card(
-                    "Active Headcount",
-                    f"{int(current_headcount):,}",
-                    "Active staff at end of selected window",
-                    progress=current_headcount / total_ever_served if total_ever_served > 0 else 0,
-                    progress_label=f"{current_headcount / total_ever_served:.0%} of total ever served" if total_ever_served > 0 else ""
-                )
+                metric_card("Active Headcount", f"{int(current_headcount):,}", "Active staff at end of selected window",
+                            progress=current_headcount/total_ever_served if total_ever_served > 0 else 0,
+                            progress_label=f"{current_headcount/total_ever_served:.0%} of total ever served" if total_ever_served > 0 else "")
             with kpi_col2:
-                metric_card(
-                    "Total Window Departures",
-                    f"{int(total_period_attrition):,}",
-                    "Employees who left during the selected period",
-                    progress=total_period_attrition / total_ever_served if total_ever_served > 0 else 0,
-                    progress_label=f"{total_period_attrition / total_ever_served:.0%} of total ever served" if total_ever_served > 0 else ""
-                )
+                metric_card("Total Window Departures", f"{int(total_period_attrition):,}", "Employees who left during the selected period",
+                            progress=total_period_attrition/total_ever_served if total_ever_served > 0 else 0,
+                            progress_label=f"{total_period_attrition/total_ever_served:.0%} of total ever served" if total_ever_served > 0 else "")
             with kpi_col3:
-                metric_card(
-                    "Period Attrition Rate",
-                    f"{attrition_rate:.2f}%",
-                    "Share of total workforce that resigned in this window",
-                    progress=min(attrition_rate / 100, 1.0),
-                    progress_label="Resignation share within selected period"
-                )
+                metric_card("Period Attrition Rate", f"{attrition_rate_val:.2f}%", "Share of total workforce that resigned in this window",
+                            progress=min(attrition_rate_val/100, 1.0),
+                            progress_label="Resignation share within selected period")
 
             st.markdown("---")
-
-            # =========================================================================
-            # --- ROW 1: THREE SIDE-BY-SIDE HISTORICAL TRENDS ---
-            # =========================================================================
-            st.markdown("### Historical Trends Matrix")
-            chart_col1, chart_col2, chart_col3 = st.columns(3)
-
-            with chart_col1:
-                st.markdown("#### MoM Attrition Rate Velocity")
-                attrition_line = alt.Chart(timeline_summary_df).mark_line(
-                    color='#ff4b4b', strokeWidth=3, point=True
-                ).encode(
+            st.markdown("### Historical Trends")
+            ch1, ch2, ch3 = st.columns(3)
+            with ch1:
+                st.markdown("#### MoM Attrition Rate")
+                st.altair_chart(alt.Chart(timeline_df).mark_line(color='#ff4b4b', strokeWidth=3, point=True).encode(
                     x=alt.X(x_axis_field, sort=x_axis_sort, title=x_axis_title),
                     y=alt.Y('Attrition_Rate_Percent:Q', title='Attrition Rate (%)'),
                     tooltip=['Month_Identifier', alt.Tooltip('Attrition_Rate_Percent:Q', format='.2f', title='Attrition %')]
-                ).properties(height=260)
-                st.altair_chart(attrition_line, use_container_width=True)
-
-            with chart_col2:
-                st.markdown("#### Active Headcount Scaling")
-                active_bars = alt.Chart(timeline_summary_df).mark_bar(color='#1f77b4').encode(
+                ).properties(height=260), use_container_width=True)
+            with ch2:
+                st.markdown("#### Active Headcount")
+                st.altair_chart(alt.Chart(timeline_df).mark_bar(color='#1f77b4').encode(
                     x=alt.X(x_axis_field, sort=x_axis_sort, title=x_axis_title),
                     y=alt.Y('Active_Headcount:Q', title='Workforce Volume'),
                     tooltip=['Month_Identifier', alt.Tooltip('Active_Headcount:Q', title='Active Staff')]
-                ).properties(height=260)
-                st.altair_chart(active_bars, use_container_width=True)
-
-            with chart_col3:
+                ).properties(height=260), use_container_width=True)
+            with ch3:
                 st.markdown("#### Volumetric Attrition Losses")
-                departures_bars = alt.Chart(timeline_summary_df).mark_bar(color='#e45756').encode(
+                st.altair_chart(alt.Chart(timeline_df).mark_bar(color='#e45756').encode(
                     x=alt.X(x_axis_field, sort=x_axis_sort, title=x_axis_title),
                     y=alt.Y('Attrition_Departures:Q', title='Departures Count'),
                     tooltip=['Month_Identifier', alt.Tooltip('Attrition_Departures:Q', title='Losses')]
-                ).properties(height=260)
-                st.altair_chart(departures_bars, use_container_width=True)
+                ).properties(height=260), use_container_width=True)
 
             st.markdown("---")
+            if not df_departures_period.empty:
+                st.markdown("### Categorical Attrition Distribution")
+                bd1, bd2 = st.columns(2)
+                with bd1:
+                    st.markdown("#### Primary Root Causes")
+                    reason_summary = df_departures_period.groupby('Attrition_Reason', dropna=False).size().reset_index(name='Count')
+                    reason_summary['Attrition_Reason'] = reason_summary['Attrition_Reason'].fillna('Unspecified')
+                    st.altair_chart(alt.Chart(reason_summary).mark_bar(color='#e45756', cornerRadiusEnd=3).encode(
+                        y=alt.Y('Attrition_Reason:N', sort='-x', title='Reason'),
+                        x=alt.X('Count:Q', title='Total Losses'),
+                        tooltip=['Attrition_Reason:N', 'Count:Q']
+                    ).properties(height=280), use_container_width=True)
+                with bd2:
+                    st.markdown("#### Organizational Impact")
+                    if 'Department' in df_departures_period.columns and 'JobRole' in df_departures_period.columns:
+                        role_summary = df_departures_period.groupby(['Department', 'JobRole']).size().reset_index(name='Count')
+                        st.altair_chart(alt.Chart(role_summary).mark_bar(cornerRadiusEnd=3).encode(
+                            y=alt.Y('JobRole:N', sort='-x', title='Job Role'),
+                            x=alt.X('Count:Q', title='Total Losses'),
+                            color=alt.Color('Department:N', scale=alt.Scale(scheme='tableau10')),
+                            tooltip=['Department:N', 'JobRole:N', 'Count:Q']
+                        ).properties(height=280), use_container_width=True)
 
-            # =========================================================================
-            # --- ROW 2: Tenure Bracket and Gender Mix ---
-            # =========================================================================
-    st.markdown("### 👥 Workforce Composition & Lifecycle Demographics")
-                
-            # Define logical company tenure bins and corresponding labels
-    tenure_bins = [-1, 1, 4, 7, 10, 100]
-    tenure_labels = ['0-1 Years', '2-4 Years', '5-7 Years', '8-10 Years', '11+ Years']
-    
-    # 1. Capture the final active snapshot state from the last processed iteration row
-    # This represents our baseline active population
-    df_exec['Tenure_Bracket'] = pd.cut(
-        df_exec['YearsAtCompany'], 
-        bins=tenure_bins, 
-        labels=tenure_labels
-    )
-    
-    # Isolate records active at the current window end point
-    df_active_snapshot = df_exec[active_mask].copy()
-    df_active_snapshot['Employment_Status'] = 'Active Staff'
-    
-    # Isolate historical departures gathered within the timeline processing loops
-    if not df_departures_period.empty:
-        df_departures_snapshot = df_departures_period.copy()
-        df_departures_snapshot['Tenure_Bracket'] = pd.cut(
-            df_departures_snapshot['YearsAtCompany'], 
-            bins=tenure_bins, 
-            labels=tenure_labels
-        )
-        df_departures_snapshot['Employment_Status'] = 'Attrited Loss'
-        
-        # Combine both segments into a unified master dataset
-        df_demographics_master = pd.concat([df_active_snapshot, df_departures_snapshot], ignore_index=True)
-    else:
-        df_active_snapshot['Tenure_Bracket'] = pd.cut(df_active_snapshot['YearsAtCompany'], bins=tenure_bins, labels=tenure_labels)
-        df_demographics_master = df_active_snapshot
-
-    if df_demographics_master.empty:
-        st.info("ℹ️ No employee records found for this timeframe to display demographic comparisons.")
-    else:
-        # Create two side-by-side multi-layer clustered columns
-        demog_col1, demog_col2 = st.columns(2)
-        
-        import altair as alt
-
-        # --- LEFT CHART: WORKFORCE GENDER COMPARISON MATRIX ---
-        with demog_col1:
-            st.markdown("#### Headcount Status vs Gender Mix")
-            
-            gender_comp = df_demographics_master.groupby(
-                ['Employment_Status', 'Gender']
-            ).size().reset_index(name='Headcount')
-            
-            gender_comp_chart = alt.Chart(gender_comp).mark_bar(cornerRadiusEnd=3).encode(
-                y=alt.Y('Employment_Status:N', title='Status Category'),
-                x=alt.X('Headcount:Q', title='Employee Count'),
-                color=alt.Color(
-                    'Gender:N', 
-                    scale=alt.Scale(domain=['Male', 'Female'], range=['#1f77b4', '#ff7f0e']),
-                    title='Gender Group'
-                ),
-                yOffset='Gender:N', # Clusters Male and Female bars side-by-side
-                tooltip=['Employment_Status', 'Gender', alt.Tooltip('Headcount:Q', format=',d')]
-            ).properties(height=280)
-            
-            st.altair_chart(gender_comp_chart, use_container_width=True)
-
-        # --- RIGHT CHART: WORKFORCE TENURE COMPARISON MATRIX ---
-        with demog_col2:
-            st.markdown("#### Attrition Exposure by Tenure Milestone")
-            
-            tenure_comp = df_demographics_master.groupby(
-                ['Tenure_Bracket', 'Employment_Status'], 
-                observed=False
-            ).size().reset_index(name='Headcount')
-            
-            tenure_comp_chart = alt.Chart(tenure_comp).mark_bar(cornerRadiusEnd=3).encode(
-                y=alt.Y('Tenure_Bracket:N', sort=tenure_labels, title='Company Tenure Milestone'),
-                x=alt.X('Headcount:Q', title='Employee Count'),
-                color=alt.Color(
-                    'Employment_Status:N', 
-                    scale=alt.Scale(domain=['Active Staff', 'Attrited Loss'], range=['#2ca02c', '#d62728']),
-                    title='Status'
-                ),
-                yOffset='Employment_Status:N', # Clusters Active vs Attrited bars side-by-side
-                tooltip=['Tenure_Bracket', 'Employment_Status', alt.Tooltip('Headcount:Q', format=',d')]
-            ).properties(height=280)
-            
-            st.altair_chart(tenure_comp_chart, use_container_width=True)
-
-        st.markdown("---")
-# =========================================================================
-        # --- ROW 3: SIDE-BY-SIDE AGE & MARITAL STATUS COMPARISON ---
-        # =========================================================================
-        st.markdown("### Lifecycle Vulnerabilities: Age & Marital Dynamics")
-        
-        demog_col3, demog_col4 = st.columns(2)
-        
-        # --- LEFT CHART: AGE BRACKET MATRIX ---
-        with demog_col3:
-            st.markdown("#### Headcount Status vs Age Generational Profile")
-            
-            # Establish standard HR generational age brackets
-            age_bins = [0, 24, 34, 44, 54, 120]
-            age_labels = ['Under 25', '25-34', '35-44', '45-54', '55+']
-            
-            df_demographics_master['Age_Bracket'] = pd.cut(
-                df_demographics_master['Age'], 
-                bins=age_bins, 
-                labels=age_labels
-            )
-            
-            age_comp = df_demographics_master.groupby(
-                ['Age_Bracket', 'Employment_Status'], 
-                observed=False
-            ).size().reset_index(name='Headcount')
-            
-            age_comp_chart = alt.Chart(age_comp).mark_bar(cornerRadiusEnd=3).encode(
-                y=alt.Y('Age_Bracket:N', sort=age_labels, title='Age Bracket Profile'),
-                x=alt.X('Headcount:Q', title='Employee Count'),
-                color=alt.Color(
-                    'Employment_Status:N', 
-                    scale=alt.Scale(domain=['Active Staff', 'Attrited Loss'], range=['#2ca02c', '#d62728']),
-                    legend=None # Hide legend since it mirrors the chart right next to it
-                ),
-                yOffset='Employment_Status:N', # Clusters Active vs Attrited bars side-by-side
-                tooltip=['Age_Bracket', 'Employment_Status', alt.Tooltip('Headcount:Q', format=',d')]
-            ).properties(height=280)
-            
-            st.altair_chart(age_comp_chart, use_container_width=True)
-
-        # --- RIGHT CHART: MARITAL STATUS MATRIX ---
-        with demog_col4:
-            st.markdown("#### Headcount Status vs Marital Stability Mix")
-            
-            marital_comp = df_demographics_master.groupby(
-                ['MaritalStatus', 'Employment_Status']
-            ).size().reset_index(name='Headcount')
-            
-            marital_comp_chart = alt.Chart(marital_comp).mark_bar(cornerRadiusEnd=3).encode(
-                y=alt.Y('MaritalStatus:N', sort='-x', title='Marital Status Category'),
-                x=alt.X('Headcount:Q', title='Employee Count'),
-                color=alt.Color(
-                    'Employment_Status:N', 
-                    scale=alt.Scale(domain=['Active Staff', 'Attrited Loss'], range=['#2ca02c', '#d62728']),
-                    title='Status'
-                ),
-                yOffset='Employment_Status:N', # Clusters Active vs Attrited bars side-by-side
-                tooltip=['MaritalStatus', 'Employment_Status', alt.Tooltip('Headcount:Q', format=',d')]
-            ).properties(height=280)
-            
-            st.altair_chart(marital_comp_chart, use_container_width=True)
-
-        st.markdown("---")
+            with st.expander("🔍 Monthly Aggregates Table"):
+                disp = timeline_df.copy()
+                disp['Attrition_Rate_Percent'] = disp['Attrition_Rate_Percent'].map('{:,.2f}%'.format)
+                st.dataframe(disp.drop(columns=['Sort_Key'], errors='ignore'), use_container_width=True)
 
 
 
@@ -1915,9 +1633,6 @@ elif page == "🎯 Attrition Drivers":
         unsafe_allow_html=True,
     )
 
-    # Keep this page clean when no custom data has been uploaded yet.
-    # This avoids showing sample-data results or schema-related messages in this section.
-    # Show content if user_df has the required columns (uploaded OR loaded from disk)
     _drivers_ready = "Attrition" in user_df.columns and len(user_df) > 2
     if not _drivers_ready:
         st.info("Upload the HR employee data CSV file from the sidebar to view the Resignation Drivers dashboard.")
@@ -1980,8 +1695,6 @@ elif page == "🎯 Attrition Drivers":
                 plt.close(fig)
 
             def finish_overview_chart(fig):
-                # Use the same sizing behavior as the Patterns charts so both Overview graphs
-                # visually fill their cards as evenly as possible.
                 fig.tight_layout(pad=1.8)
                 st.pyplot(fig, use_container_width=True, bbox_inches=None)
                 plt.close(fig)
@@ -2026,11 +1739,9 @@ elif page == "🎯 Attrition Drivers":
                         .replace({"": "Not Available", "nan": "Not Available", "None": "Not Available"})
                     )
 
-            # Date parsing is kept inside Attrition Drivers only so the other tabs remain untouched.
             date_reference_columns = [col for col in ["Hire_Date", "Exit_Date"] if col in driver_df.columns]
             for col in date_reference_columns:
                 driver_df[col] = pd.to_datetime(driver_df[col], errors="coerce")
-            # Also coerce on filtered_df which is a copy made before this block
             for col in date_reference_columns:
                 if col in filtered_df.columns:
                     filtered_df[col] = pd.to_datetime(filtered_df[col], errors="coerce")
@@ -2435,10 +2146,6 @@ elif page == "🎯 Attrition Drivers":
                                     chart_df = hist_df.copy()
                                     chart_df["Employment_Status"] = np.where(chart_df["Attrition"] == "Yes", "Resigned", "Active")
 
-                                    # These charts use an overlay style instead of stacked totals.
-                                    # Active employees are shown as the wider background bar, while
-                                    # resigned employees are shown in front from the same baseline.
-                                    # This keeps the resigned count readable without implying a stacked total.
                                     compact_discrete_fields = ["NumCompaniesWorked", "PerformanceRating"]
                                     tenure_fields = ["YearsAtCompany", "YearsInCurrentRole"]
                                     banded_continuous_fields = ["MonthlyIncome", "Age"]
@@ -2605,9 +2312,7 @@ elif page == "⚖️ Wellbeing/Performance":
     st.header("⚖️ Wellbeing & Performance Matrix")
     st.markdown("---")
 
-    # Ruth
 
-    # --- FILTERS ---
     col_f1, col_f2, col_f3 = st.columns(3)
 
     with col_f1:
@@ -2637,7 +2342,6 @@ elif page == "⚖️ Wellbeing/Performance":
             _wb_date_col = None
             _wb_month = "All"
 
-    # Apply filters to a working copy of the data
     wb_df = user_df.copy()
     if selected_company != "All":
         wb_df = wb_df[wb_df["Company"] == selected_company]
@@ -2680,7 +2384,6 @@ elif page == "⚖️ Wellbeing/Performance":
             ax.legend(handles=patches, fontsize=9, title="",
                       facecolor="none", edgecolor=GRID_COLOR, labelcolor=FG)
 
-    # --- SCORECARDS ---
     avg_job = wb_df['JobSatisfaction'].mean()
     avg_env = wb_df['EnvironmentSatisfaction'].mean()
     avg_rel = wb_df['RelationshipSatisfaction'].mean()
@@ -2905,300 +2608,264 @@ elif page == "⚖️ Wellbeing/Performance":
 
 
 
+elif page == "💰 Attrition Simulator":
+    st.header("📊 Attrition Financial Risk Indicator")
+    st.markdown("---")
 
-# elif page == "💰 Attrition Simulator":
-#     st.header("📊 Attrition Financial Risk Indicator")
-#     st.markdown("---")
+    st.markdown("### 🔍 Executive Risk Monitoring & 12-Month Run-Rate Projection")
+    st.caption("""
+    **Forward-Looking Context:** This module translates historical turnover into forward-looking dollar exposure.
+    Using an active-window monthly run-rate model, it projects cumulative financial bleed over 12 months —
+    capped at your current at-risk workforce value — so operators can act before losses become irreversible.
+    """)
+    st.markdown("[Learn more about Attrition Risk Financial Indicator Engine here](https://docs.google.com/document/d/1E7UzjTNt62vo_jkuiTeIZ8PTD9DydjK4av4Tc0emmZE/edit?tab=t.0)")
 
-#     st.markdown("### 🔍 Executive Risk Monitoring & 12-Month Run-Rate Projection")
-#     st.caption("""
-#     **Forward-Looking Context:** This module translates historical turnover into forward-looking dollar exposure.
-#     Using an active-window monthly run-rate model, it projects cumulative financial bleed over 12 months —
-#     capped at your current at-risk workforce value — so operators can act before losses become irreversible.
-#     """)
-#     st.markdown("[Learn more about Attrition Risk Financial Indicator Engine here](https://docs.google.com/document/d/1E7UzjTNt62vo_jkuiTeIZ8PTD9DydjK4av4Tc0emmZE/edit?tab=t.0)")
+    @st.cache_resource
+    def get_fallback_rf_predictions(df):
+        np.random.seed(42)
+        return np.random.uniform(0.05, 0.85, size=len(df))
 
-#     # Fallback risk scoring — replaced by trained model when available in session state
-#     @st.cache_resource
-#     def get_fallback_rf_predictions(df):
-#         np.random.seed(42)
-#         return np.random.uniform(0.05, 0.85, size=len(df))
+    st.markdown("#### 🪵 Filter Employee Risk Context")
+    focus_col1, focus_col2, focus_col3, focus_col4 = st.columns(4)
 
-#     # =========================================================================
-#     # 1. BUSINESS CONTEXT FILTERS
-#     # =========================================================================
-#     st.markdown("#### 🪵 Filter Employee Risk Context")
-#     focus_col1, focus_col2, focus_col3, focus_col4 = st.columns(4)
+    with focus_col1:
+        companies = ["All Companies"] + sorted(user_df["Company"].dropna().unique().tolist())
+        selected_company = st.selectbox("Company Focus", companies)
 
-#     with focus_col1:
-#         companies = ["All Companies"] + sorted(user_df["Company"].dropna().unique().tolist())
-#         selected_company = st.selectbox("Company Focus", companies)
+    with focus_col2:
+        departments = ["All Departments"] + sorted(user_df["Department"].dropna().unique().tolist())
+        selected_dept = st.selectbox("Department Focus", departments)
 
-#     with focus_col2:
-#         departments = ["All Departments"] + sorted(user_df["Department"].dropna().unique().tolist())
-#         selected_dept = st.selectbox("Department Focus", departments)
+    with focus_col3:
+        career_levels = [
+            "All Levels",
+            "Entry-Level Staff (Level 1)",
+            "Mid-Level Professionals (Level 2-3)",
+            "Management & Specialists (Level 4-5)"
+        ]
+        selected_career = st.selectbox("Career Level Focus", career_levels)
 
-#     with focus_col3:
-#         career_levels = [
-#             "All Levels",
-#             "Entry-Level Staff (Level 1)",
-#             "Mid-Level Professionals (Level 2-3)",
-#             "Management & Specialists (Level 4-5)"
-#         ]
-#         selected_career = st.selectbox("Career Level Focus", career_levels)
+    with focus_col4:
+        tenure_groups = ["All Milestones", "New Hires (0-2 Yrs)", "Mid-Tenure (3-7 Yrs)", "Tenured Pillars (8+ Yrs)"]
+        selected_tenure = st.selectbox("Tenure / Milestone Groups", tenure_groups)
 
-#     with focus_col4:
-#         tenure_groups = ["All Milestones", "New Hires (0-2 Yrs)", "Mid-Tenure (3-7 Yrs)", "Tenured Pillars (8+ Yrs)"]
-#         selected_tenure = st.selectbox("Tenure / Milestone Groups", tenure_groups)
+    st.warning("""
+    📝 **Note on Financial Calibration:** Turnover impact is automatically mapped to industry cost benchmarks
+    based on organizational seniority: Entry-Level (Level 1) is calculated at 30% of annual salary;
+    Levels 2-3 (Mid-Level) at 60%; and Levels 4-5 (Management/Specialists) at 100% to fully account for
+    vacancy disruptions, specialized operational skills, and recruitment onboarding friction.
+    """)
 
-#     # =========================================================================
-#     # 2. VISUAL METHODOLOGY COGNITION
-#     # =========================================================================
-#     st.warning("""
-#     📝 **Note on Financial Calibration:** Turnover impact is automatically mapped to industry cost benchmarks
-#     based on organizational seniority: Entry-Level (Level 1) is calculated at 30% of annual salary;
-#     Levels 2-3 (Mid-Level) at 60%; and Levels 4-5 (Management/Specialists) at 100% to fully account for
-#     vacancy disruptions, specialized operational skills, and recruitment onboarding friction.
-#     """)
+    with st.expander("⚙️ View Financial Calibration Framework", expanded=False):
+        st.markdown("""
+        | Career Level | Job Level | Cost Benchmark | Rationale |
+        |---|---|---|---|
+        | Entry-Level Staff | Level 1 | 30% of Annual Salary | High replacement volume, short training period |
+        | Mid-Level Professionals | Level 2–3 | 60% of Annual Salary | Moderate disruption, specialized operational knowledge |
+        | Leadership & Specialists | Level 4–5 | 100% of Annual Salary | Critical vacancy gap, long headhunter timelines, severe project delays |
+        """)
 
-#     with st.expander("⚙️ View Financial Calibration Framework", expanded=False):
-#         st.markdown("""
-#         | Career Level | Job Level | Cost Benchmark | Rationale |
-#         |---|---|---|---|
-#         | Entry-Level Staff | Level 1 | 30% of Annual Salary | High replacement volume, short training period |
-#         | Mid-Level Professionals | Level 2–3 | 60% of Annual Salary | Moderate disruption, specialized operational knowledge |
-#         | Leadership & Specialists | Level 4–5 | 100% of Annual Salary | Critical vacancy gap, long headhunter timelines, severe project delays |
-#         """)
+    df_analysis = user_df.copy()
+    for _dc in ["Hire_Date", "Exit_Date"]:
+        if _dc in df_analysis.columns:
+            df_analysis[_dc] = pd.to_datetime(df_analysis[_dc], errors="coerce")
 
-#     # =========================================================================
-#     # 3. DATA SEGMENTATION & FILTER ENGINE
-#     # =========================================================================
-#     df_analysis = user_df.copy()
-#     # Ensure date columns are datetime — may arrive as strings from user_df
-#     for _dc in ["Hire_Date", "Exit_Date"]:
-#         if _dc in df_analysis.columns:
-#             df_analysis[_dc] = pd.to_datetime(df_analysis[_dc], errors="coerce")
+    if selected_company != "All Companies":
+        df_analysis = df_analysis[df_analysis["Company"] == selected_company].copy()
+    if selected_dept != "All Departments":
+        df_analysis = df_analysis[df_analysis["Department"] == selected_dept].copy()
 
-#     if selected_company != "All Companies":
-#         df_analysis = df_analysis[df_analysis["Company"] == selected_company].copy()
-#     if selected_dept != "All Departments":
-#         df_analysis = df_analysis[df_analysis["Department"] == selected_dept].copy()
+    if selected_career == "Entry-Level Staff (Level 1)":
+        df_analysis = df_analysis[df_analysis["JobLevel"] == 1].copy()
+    elif selected_career == "Mid-Level Professionals (Level 2-3)":
+        df_analysis = df_analysis[df_analysis["JobLevel"].isin([2, 3])].copy()
+    elif selected_career == "Management & Specialists (Level 4-5)":
+        df_analysis = df_analysis[df_analysis["JobLevel"].isin([4, 5])].copy()
 
-#     if selected_career == "Entry-Level Staff (Level 1)":
-#         df_analysis = df_analysis[df_analysis["JobLevel"] == 1].copy()
-#     elif selected_career == "Mid-Level Professionals (Level 2-3)":
-#         df_analysis = df_analysis[df_analysis["JobLevel"].isin([2, 3])].copy()
-#     elif selected_career == "Management & Specialists (Level 4-5)":
-#         df_analysis = df_analysis[df_analysis["JobLevel"].isin([4, 5])].copy()
+    if selected_tenure == "New Hires (0-2 Yrs)":
+        df_analysis = df_analysis[df_analysis["YearsAtCompany"] <= 2].copy()
+    elif selected_tenure == "Mid-Tenure (3-7 Yrs)":
+        df_analysis = df_analysis[(df_analysis["YearsAtCompany"] >= 3) & (df_analysis["YearsAtCompany"] <= 7)].copy()
+    elif selected_tenure == "Tenured Pillars (8+ Yrs)":
+        df_analysis = df_analysis[df_analysis["YearsAtCompany"] >= 8].copy()
 
-#     if selected_tenure == "New Hires (0-2 Yrs)":
-#         df_analysis = df_analysis[df_analysis["YearsAtCompany"] <= 2].copy()
-#     elif selected_tenure == "Mid-Tenure (3-7 Yrs)":
-#         df_analysis = df_analysis[(df_analysis["YearsAtCompany"] >= 3) & (df_analysis["YearsAtCompany"] <= 7)].copy()
-#     elif selected_tenure == "Tenured Pillars (8+ Yrs)":
-#         df_analysis = df_analysis[df_analysis["YearsAtCompany"] >= 8].copy()
+    df_analysis = df_analysis.copy()
+    df_analysis["AnnualSalary"] = df_analysis["MonthlyIncome"] * 12
 
-#     # =========================================================================
-#     # 4. ROW-BY-ROW COST CALCULATION USING JOB LEVEL BENCHMARKS
-#     # =========================================================================
-#     df_analysis = df_analysis.copy()
-#     df_analysis["AnnualSalary"] = df_analysis["MonthlyIncome"] * 12
+    def apply_job_level_cost(row):
+        if row["JobLevel"] == 1:
+            return row["AnnualSalary"] * 0.30
+        elif row["JobLevel"] in [2, 3]:
+            return row["AnnualSalary"] * 0.60
+        else:
+            return row["AnnualSalary"] * 1.00
 
-#     def apply_job_level_cost(row):
-#         if row["JobLevel"] == 1:
-#             return row["AnnualSalary"] * 0.30
-#         elif row["JobLevel"] in [2, 3]:
-#             return row["AnnualSalary"] * 0.60
-#         else:
-#             return row["AnnualSalary"] * 1.00
+    df_analysis["IndividualTurnoverCost"] = df_analysis.apply(apply_job_level_cost, axis=1)
 
-#     df_analysis["IndividualTurnoverCost"] = df_analysis.apply(apply_job_level_cost, axis=1)
+    df_analysis["Attrition_Risk_Prob"] = get_fallback_rf_predictions(df_analysis)
 
-#     # Inject risk probability scores — replaced by trained model scores when available
-#     df_analysis["Attrition_Risk_Prob"] = get_fallback_rf_predictions(df_analysis)
+    historical_attrited = df_analysis[df_analysis["Attrition"] == "Yes"].copy()
+    active_workforce    = df_analysis[df_analysis["Attrition"] == "No"].copy()
+    high_risk_active_staff = active_workforce[active_workforce["Attrition_Risk_Prob"] >= 0.50].copy()
 
-#     # Explicit memory isolation: keep historical losses and active workforce fully separate
-#     historical_attrited = df_analysis[df_analysis["Attrition"] == "Yes"].copy()
-#     active_workforce    = df_analysis[df_analysis["Attrition"] == "No"].copy()
-#     high_risk_active_staff = active_workforce[active_workforce["Attrition_Risk_Prob"] >= 0.50].copy()
+    realized_historical_loss = historical_attrited["IndividualTurnoverCost"].sum()
+    at_risk_exposure_cost    = high_risk_active_staff["IndividualTurnoverCost"].sum()
 
-#     realized_historical_loss = historical_attrited["IndividualTurnoverCost"].sum()
-#     at_risk_exposure_cost    = high_risk_active_staff["IndividualTurnoverCost"].sum()
+    has_exit_dates = (
+        len(historical_attrited) > 0
+        and historical_attrited["Exit_Date"].notna().sum() > 0
+    )
 
-#     # =========================================================================
-#     # 5. ACTIVE-WINDOW MONTHLY RUN-RATE MODEL
-#     # =========================================================================
-#     # Count only the unique calendar months where departures actually occurred
-#     has_exit_dates = (
-#         len(historical_attrited) > 0
-#         and historical_attrited["Exit_Date"].notna().sum() > 0
-#     )
+    if has_exit_dates:
+        exit_periods = historical_attrited["Exit_Date"].dropna().dt.to_period("M")
+        unique_active_months = max(exit_periods.nunique(), 1)
+    else:
+        unique_active_months = 12
 
-#     if has_exit_dates:
-#         exit_periods = historical_attrited["Exit_Date"].dropna().dt.to_period("M")
-#         unique_active_months = max(exit_periods.nunique(), 1)
-#     else:
-#         unique_active_months = 12
+    average_monthly_loss_velocity = (
+        realized_historical_loss / unique_active_months
+        if unique_active_months > 0 else 0.0
+    )
 
-#     # Baseline burn velocity: average cost lost per active departure month
-#     average_monthly_loss_velocity = (
-#         realized_historical_loss / unique_active_months
-#         if unique_active_months > 0 else 0.0
-#     )
+    ceiling_cap = at_risk_exposure_cost if at_risk_exposure_cost > 0 else realized_historical_loss * 1.5
+    x_labels = [f"+{i} Mo" for i in range(1, 13)]
+    cumulative_projection = [
+        min(i * average_monthly_loss_velocity, ceiling_cap)
+        for i in range(1, 13)
+    ]
+    total_predicted_12m_bleed = cumulative_projection[-1]
 
-#     # 12-month cumulative projection, capped at at-risk exposure ceiling
-#     ceiling_cap = at_risk_exposure_cost if at_risk_exposure_cost > 0 else realized_historical_loss * 1.5
-#     x_labels = [f"+{i} Mo" for i in range(1, 13)]
-#     cumulative_projection = [
-#         min(i * average_monthly_loss_velocity, ceiling_cap)
-#         for i in range(1, 13)
-#     ]
-#     total_predicted_12m_bleed = cumulative_projection[-1]
+    if has_exit_dates and exit_periods.nunique() >= 2:
+        sorted_periods = sorted(exit_periods.unique())
+        latest_period   = sorted_periods[-1]
+        previous_period = sorted_periods[-2]
 
-#     # =========================================================================
-#     # 6. MoM DELTA COMPUTATION FOR METRIC TILES
-#     # =========================================================================
-#     # Derive MoM deltas by comparing the two most-recent active departure periods
-#     if has_exit_dates and exit_periods.nunique() >= 2:
-#         sorted_periods = sorted(exit_periods.unique())
-#         latest_period   = sorted_periods[-1]
-#         previous_period = sorted_periods[-2]
+        latest_mask   = historical_attrited["Exit_Date"].dt.to_period("M") == latest_period
+        previous_mask = historical_attrited["Exit_Date"].dt.to_period("M") == previous_period
 
-#         latest_mask   = historical_attrited["Exit_Date"].dt.to_period("M") == latest_period
-#         previous_mask = historical_attrited["Exit_Date"].dt.to_period("M") == previous_period
+        latest_active_risk   = active_workforce[active_workforce["Attrition_Risk_Prob"] >= 0.50]
+        previous_active_risk = latest_active_risk  # active cohort is static; deltas proxy velocity shift
 
-#         latest_active_risk   = active_workforce[active_workforce["Attrition_Risk_Prob"] >= 0.50]
-#         previous_active_risk = latest_active_risk  # active cohort is static; deltas proxy velocity shift
+        latest_cost   = historical_attrited[latest_mask]["IndividualTurnoverCost"].sum()
+        previous_cost = historical_attrited[previous_mask]["IndividualTurnoverCost"].sum()
 
-#         latest_cost   = historical_attrited[latest_mask]["IndividualTurnoverCost"].sum()
-#         previous_cost = historical_attrited[previous_mask]["IndividualTurnoverCost"].sum()
+        latest_headcount   = len(historical_attrited[latest_mask])
+        previous_headcount = len(historical_attrited[previous_mask])
 
-#         latest_headcount   = len(historical_attrited[latest_mask])
-#         previous_headcount = len(historical_attrited[previous_mask])
+        mom_headcount_delta = len(high_risk_active_staff) - previous_headcount
+        mom_cost_delta      = latest_cost - previous_cost
+    else:
+        mom_headcount_delta = None
+        mom_cost_delta      = None
 
-#         mom_headcount_delta = len(high_risk_active_staff) - previous_headcount
-#         mom_cost_delta      = latest_cost - previous_cost
-#     else:
-#         mom_headcount_delta = None
-#         mom_cost_delta      = None
+    st.markdown("---")
+    st.subheader("📋 Headline Risk Overview")
 
-#     # =========================================================================
-#     # 7. EXECUTIVE KPI SCORECARDS
-#     # =========================================================================
-#     st.markdown("---")
-#     st.subheader("📋 Headline Risk Overview")
+    total_cohort           = len(df_analysis)
+    total_attrited_cohort  = len(historical_attrited)
+    cohort_attrition_rate  = (total_attrited_cohort / total_cohort * 100) if total_cohort > 0 else 0.0
+    st.caption(
+        f"Cohort Attrition Rate: **{cohort_attrition_rate:.1f}%** "
+        f"({total_attrited_cohort} resigned / {total_cohort} total in selected filters)"
+    )
 
-#     total_cohort           = len(df_analysis)
-#     total_attrited_cohort  = len(historical_attrited)
-#     cohort_attrition_rate  = (total_attrited_cohort / total_cohort * 100) if total_cohort > 0 else 0.0
-#     st.caption(
-#         f"Cohort Attrition Rate: **{cohort_attrition_rate:.1f}%** "
-#         f"({total_attrited_cohort} resigned / {total_cohort} total in selected filters)"
-#     )
+    kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
 
-#     kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
+    active_total_count = len(active_workforce) if len(active_workforce) > 0 else 1
 
-#     active_total_count = len(active_workforce) if len(active_workforce) > 0 else 1
+    with kpi_col1:
+        metric_card(
+            "At-Risk Active Staff",
+            f"{len(high_risk_active_staff):,}",
+            f"MoM: {mom_headcount_delta:+,} headcount" if mom_headcount_delta is not None else "Flagged employees with risk score ≥ 50%",
+            progress=len(high_risk_active_staff) / active_total_count,
+            progress_label=f"{len(high_risk_active_staff) / active_total_count:.0%} of active workforce flagged"
+        )
 
-#     with kpi_col1:
-#         metric_card(
-#             "At-Risk Active Staff",
-#             f"{len(high_risk_active_staff):,}",
-#             f"MoM: {mom_headcount_delta:+,} headcount" if mom_headcount_delta is not None else "Flagged employees with risk score ≥ 50%",
-#             progress=len(high_risk_active_staff) / active_total_count,
-#             progress_label=f"{len(high_risk_active_staff) / active_total_count:.0%} of active workforce flagged"
-#         )
+    with kpi_col2:
+        metric_card(
+            "Total Financial Exposure",
+            f"${at_risk_exposure_cost:,.0f}",
+            f"MoM: ${mom_cost_delta:+,.0f}" if mom_cost_delta is not None else "Combined replacement cost of high-risk staff",
+            progress=min(at_risk_exposure_cost / ceiling_cap, 1.0) if ceiling_cap > 0 else 0,
+            progress_label=f"{min(at_risk_exposure_cost / ceiling_cap, 1.0):.0%} of exposure ceiling" if ceiling_cap > 0 else ""
+        )
 
-#     with kpi_col2:
-#         metric_card(
-#             "Total Financial Exposure",
-#             f"${at_risk_exposure_cost:,.0f}",
-#             f"MoM: ${mom_cost_delta:+,.0f}" if mom_cost_delta is not None else "Combined replacement cost of high-risk staff",
-#             progress=min(at_risk_exposure_cost / ceiling_cap, 1.0) if ceiling_cap > 0 else 0,
-#             progress_label=f"{min(at_risk_exposure_cost / ceiling_cap, 1.0):.0%} of exposure ceiling" if ceiling_cap > 0 else ""
-#         )
+    with kpi_col3:
+        metric_card(
+            "Projected 12-Month Loss Pipeline",
+            f"${total_predicted_12m_bleed:,.0f}",
+            f"+${average_monthly_loss_velocity:,.0f} / mo burn rate",
+            progress=min(total_predicted_12m_bleed / ceiling_cap, 1.0) if ceiling_cap > 0 else 0,
+            progress_label=f"{min(total_predicted_12m_bleed / ceiling_cap, 1.0):.0%} of exposure ceiling reached" if ceiling_cap > 0 else ""
+        )
 
-#     with kpi_col3:
-#         metric_card(
-#             "Projected 12-Month Loss Pipeline",
-#             f"${total_predicted_12m_bleed:,.0f}",
-#             f"+${average_monthly_loss_velocity:,.0f} / mo burn rate",
-#             progress=min(total_predicted_12m_bleed / ceiling_cap, 1.0) if ceiling_cap > 0 else 0,
-#             progress_label=f"{min(total_predicted_12m_bleed / ceiling_cap, 1.0):.0%} of exposure ceiling reached" if ceiling_cap > 0 else ""
-#         )
+    st.markdown("---")
+    st.subheader("📈 Financial Impact Dashboard Analytics")
 
-#     # =========================================================================
-#     # 8. DUAL PANEL CHART LAYOUT
-#     # =========================================================================
-#     st.markdown("---")
-#     st.subheader("📈 Financial Impact Dashboard Analytics")
+    chart_col1, chart_col2 = st.columns(2)
 
-#     chart_col1, chart_col2 = st.columns(2)
+    with chart_col1:
+        fig1, ax1 = plt.subplots(figsize=(6, 4), facecolor="white")
+        ax1.set_facecolor("white")
 
-#     # --- LEFT: Horizontal balance sheet bar chart ---
-#     with chart_col1:
-#         fig1, ax1 = plt.subplots(figsize=(6, 4), facecolor="white")
-#         ax1.set_facecolor("white")
+        categories = [
+            "Realized Operational Losses\n(Past Resignations)",
+            "Active High-Risk Value\n(Flagged Current Staff)"
+        ]
+        costs      = [realized_historical_loss, at_risk_exposure_cost]
+        bar_colors = ["#A0A0A0", "#D9534F"]
 
-#         categories = [
-#             "Realized Operational Losses\n(Past Resignations)",
-#             "Active High-Risk Value\n(Flagged Current Staff)"
-#         ]
-#         costs      = [realized_historical_loss, at_risk_exposure_cost]
-#         bar_colors = ["#A0A0A0", "#D9534F"]
+        bars = ax1.barh(categories, costs, color=bar_colors, height=0.45)
 
-#         bars = ax1.barh(categories, costs, color=bar_colors, height=0.45)
+        for bar in bars:
+            width = bar.get_width()
+            if width > 0:
+                ax1.text(
+                    width * 0.5,
+                    bar.get_y() + bar.get_height() / 2,
+                    f"${width:,.0f}",
+                    ha="center", va="center",
+                    color="white", fontweight="bold", fontsize=10
+                )
 
-#         for bar in bars:
-#             width = bar.get_width()
-#             if width > 0:
-#                 ax1.text(
-#                     width * 0.5,
-#                     bar.get_y() + bar.get_height() / 2,
-#                     f"${width:,.0f}",
-#                     ha="center", va="center",
-#                     color="white", fontweight="bold", fontsize=10
-#                 )
+        ax1.set_title("Current Corporate Balance Sheet Context",
+                      fontsize=12, fontweight="bold", pad=15)
+        ax1.spines["top"].set_visible(False)
+        ax1.spines["right"].set_visible(False)
+        ax1.spines["bottom"].set_visible(False)
+        ax1.spines["left"].set_visible(False)
+        ax1.get_xaxis().set_visible(False)
+        fig1.tight_layout()
+        st.pyplot(fig1)
+        plt.close()
 
-#         ax1.set_title("Current Corporate Balance Sheet Context",
-#                       fontsize=12, fontweight="bold", pad=15)
-#         ax1.spines["top"].set_visible(False)
-#         ax1.spines["right"].set_visible(False)
-#         ax1.spines["bottom"].set_visible(False)
-#         ax1.spines["left"].set_visible(False)
-#         ax1.get_xaxis().set_visible(False)
-#         fig1.tight_layout()
-#         st.pyplot(fig1)
-#         plt.close()
+    with chart_col2:
+        fig2, ax2 = plt.subplots(figsize=(6, 4), facecolor="white")
+        ax2.set_facecolor("white")
 
-#     # --- RIGHT: 12-month cumulative area trend line ---
-#     with chart_col2:
-#         fig2, ax2 = plt.subplots(figsize=(6, 4), facecolor="white")
-#         ax2.set_facecolor("white")
+        ax2.plot(x_labels, cumulative_projection,
+                 color="#D9534F", linewidth=2.5, marker="o", markersize=5, zorder=2)
+        ax2.fill_between(x_labels, cumulative_projection,
+                         color="#D9534F", alpha=0.12, zorder=1)
 
-#         ax2.plot(x_labels, cumulative_projection,
-#                  color="#D9534F", linewidth=2.5, marker="o", markersize=5, zorder=2)
-#         ax2.fill_between(x_labels, cumulative_projection,
-#                          color="#D9534F", alpha=0.12, zorder=1)
+        ax2.axhline(y=ceiling_cap, color="#D9534F", linestyle="--", linewidth=1.2, alpha=0.6)
+        ax2.text(
+            x_labels[-1], ceiling_cap,
+            "  Ceiling Cap\n  (Max Exposure)",
+            va="bottom", ha="right", fontsize=7.5, color="#D9534F"
+        )
 
-#         # Dashed ceiling cap line to mark the maximum preventable exposure boundary
-#         ax2.axhline(y=ceiling_cap, color="#D9534F", linestyle="--", linewidth=1.2, alpha=0.6)
-#         ax2.text(
-#             x_labels[-1], ceiling_cap,
-#             "  Ceiling Cap\n  (Max Exposure)",
-#             va="bottom", ha="right", fontsize=7.5, color="#D9534F"
-#         )
+        ax2.set_title("12-Month Cumulative Loss Projection",
+                      fontsize=12, fontweight="bold", pad=15)
+        ax2.set_xlabel("Forward Monthly Milestones", fontsize=9, labelpad=8)
+        ax2.set_ylabel("Cumulative Projected Cash Loss ($)", fontsize=9)
+        ax2.tick_params(axis="x", rotation=30, labelsize=8)
+        ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+        ax2.spines["top"].set_visible(False)
+        ax2.spines["right"].set_visible(False)
+        ax2.grid(axis="y", linestyle="--", alpha=0.3, color="#cccccc")
 
-#         ax2.set_title("12-Month Cumulative Loss Projection",
-#                       fontsize=12, fontweight="bold", pad=15)
-#         ax2.set_xlabel("Forward Monthly Milestones", fontsize=9, labelpad=8)
-#         ax2.set_ylabel("Cumulative Projected Cash Loss ($)", fontsize=9)
-#         ax2.tick_params(axis="x", rotation=30, labelsize=8)
-#         ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
-#         ax2.spines["top"].set_visible(False)
-#         ax2.spines["right"].set_visible(False)
-#         ax2.grid(axis="y", linestyle="--", alpha=0.3, color="#cccccc")
-
-#         fig2.tight_layout()
-#         st.pyplot(fig2)
-#         plt.close()
+        fig2.tight_layout()
+        st.pyplot(fig2)
+        plt.close()
