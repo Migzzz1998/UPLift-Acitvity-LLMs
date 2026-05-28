@@ -880,7 +880,7 @@ with st.sidebar:
     <div class='status-pill'>
         <div class='status-dot'></div>
         <div>
-            <div style='color:#F0F4FF;font-weight:600;font-size:0.8rem'>AI Core Online</div>
+            <div style='color:#F0F4FF;font-weight:600;font-size:0.8rem'>Project Omni-Retention</div>
             <div style='color:#545E70;font-size:0.72rem;margin-top:1px'>
                 AUC {model_metrics["auc"]} &nbsp;·&nbsp; {len(filtered_df):,} / {len(df):,} records
             </div>
@@ -2654,7 +2654,7 @@ elif page == "Wellbeing/Performance":
                 ot_data = ot_df.groupby(["OverTime", "Attrition"]).size().reset_index(name="Count")
                 fig, ax = plt.subplots(figsize=FIGSIZE, facecolor=CHART_BG)
                 sns.barplot(data=ot_data, x="OverTime", y="Count", hue="Attrition", palette=PALETTE, ax=ax)
-                style_chart(ax, "Overtime vs Attrition", "Overtime Status", "Number of Employees", legend_keys=["No", "Yes"])
+                style_chart(ax, "Overtime Attrition", "Overtime Status", "Number of Employees", legend_keys=["No", "Yes"])
                 fig.tight_layout(pad=1.8)
                 st.pyplot(fig, use_container_width=True)
                 plt.close()
