@@ -1593,35 +1593,165 @@ elif page == "📊 Executive Summary":
                     y=alt.Y('Attrition_Departures:Q', title='Departures Count'),
                     tooltip=['Month_Identifier', alt.Tooltip('Attrition_Departures:Q', title='Losses')]
                 ).properties(height=260), use_container_width=True)
+    
+    st.markdown("---")
+    st.markdown("### 👥 Workforce Composition & Lifecycle Demographics")
+                
+    # Define logical company tenure bins and corresponding labels
+    tenure_bins = [-1, 1, 4, 7, 10, 100]
+    tenure_labels = ['0-1 Years', '2-4 Years', '5-7 Years', '8-10 Years', '11+ Years']
 
-            st.markdown("---")
-            if not df_departures_period.empty:
-                st.markdown("### Categorical Attrition Distribution")
-                bd1, bd2 = st.columns(2)
-                with bd1:
-                    st.markdown("#### Primary Root Causes")
-                    reason_summary = df_departures_period.groupby('Attrition_Reason', dropna=False).size().reset_index(name='Count')
-                    reason_summary['Attrition_Reason'] = reason_summary['Attrition_Reason'].fillna('Unspecified')
-                    st.altair_chart(alt.Chart(reason_summary).mark_bar(color='#e45756', cornerRadiusEnd=3).encode(
-                        y=alt.Y('Attrition_Reason:N', sort='-x', title='Reason'),
-                        x=alt.X('Count:Q', title='Total Losses'),
-                        tooltip=['Attrition_Reason:N', 'Count:Q']
-                    ).properties(height=280), use_container_width=True)
-                with bd2:
-                    st.markdown("#### Organizational Impact")
-                    if 'Department' in df_departures_period.columns and 'JobRole' in df_departures_period.columns:
-                        role_summary = df_departures_period.groupby(['Department', 'JobRole']).size().reset_index(name='Count')
-                        st.altair_chart(alt.Chart(role_summary).mark_bar(cornerRadiusEnd=3).encode(
-                            y=alt.Y('JobRole:N', sort='-x', title='Job Role'),
-                            x=alt.X('Count:Q', title='Total Losses'),
-                            color=alt.Color('Department:N', scale=alt.Scale(scheme='tableau10')),
-                            tooltip=['Department:N', 'JobRole:N', 'Count:Q']
-                        ).properties(height=280), use_container_width=True)
+    # 1. Capture the final active snapshot state from the last processed iteration row
+    # This represents our baseline active population
+    df_exec['Tenure_Bracket'] = pd.cut(
+        df_exec['YearsAtCompany'], 
+        bins=tenure_bins, 
+        labels=tenure_labels
+    )
 
-            with st.expander("🔍 Monthly Aggregates Table"):
-                disp = timeline_df.copy()
-                disp['Attrition_Rate_Percent'] = disp['Attrition_Rate_Percent'].map('{:,.2f}%'.format)
-                st.dataframe(disp.drop(columns=['Sort_Key'], errors='ignore'), use_container_width=True)
+    # Isolate records active at the current window end point
+    df_active_snapshot = df_exec[active_mask].copy()
+    df_active_snapshot['Employment_Status'] = 'Active Staff'
+
+    # Isolate historical departures gathered within the timeline processing loops
+    if not df_departures_period.empty:
+        df_departures_snapshot = df_departures_period.copy()
+        df_departures_snapshot['Tenure_Bracket'] = pd.cut(
+            df_departures_snapshot['YearsAtCompany'], 
+            bins=tenure_bins, 
+            labels=tenure_labels
+        )
+        df_departures_snapshot['Employment_Status'] = 'Attrited Loss'
+        
+        # Combine both segments into a unified master dataset
+        df_demographics_master = pd.concat([df_active_snapshot, df_departures_snapshot], ignore_index=True)
+    else:
+        df_active_snapshot['Tenure_Bracket'] = pd.cut(df_active_snapshot['YearsAtCompany'], bins=tenure_bins, labels=tenure_labels)
+        df_demographics_master = df_active_snapshot
+
+    if df_demographics_master.empty:
+        st.info("ℹ️ No employee records found for this timeframe to display demographic comparisons.")
+    else:
+        # Create two side-by-side multi-layer clustered columns
+        demog_col1, demog_col2 = st.columns(2)
+        
+        import altair as alt
+
+        # --- LEFT CHART: WORKFORCE GENDER COMPARISON MATRIX ---
+        with demog_col1:
+            st.markdown("#### Headcount Status vs Gender Mix")
+            
+            gender_comp = df_demographics_master.groupby(
+                ['Employment_Status', 'Gender']
+            ).size().reset_index(name='Headcount')
+            
+            gender_comp_chart = alt.Chart(gender_comp).mark_bar(cornerRadiusEnd=3).encode(
+                y=alt.Y('Employment_Status:N', title='Status Category'),
+                x=alt.X('Headcount:Q', title='Employee Count'),
+                color=alt.Color(
+                    'Gender:N', 
+                    scale=alt.Scale(domain=['Male', 'Female'], range=['#1f77b4', '#ff7f0e']),
+                    title='Gender Group'
+                ),
+                yOffset='Gender:N', # Clusters Male and Female bars side-by-side
+                tooltip=['Employment_Status', 'Gender', alt.Tooltip('Headcount:Q', format=',d')]
+            ).properties(height=280)
+            
+            st.altair_chart(gender_comp_chart, use_container_width=True)
+
+        # --- RIGHT CHART: WORKFORCE TENURE COMPARISON MATRIX ---
+        with demog_col2:
+            st.markdown("#### Attrition Exposure by Tenure Milestone")
+            
+            tenure_comp = df_demographics_master.groupby(
+                ['Tenure_Bracket', 'Employment_Status'], 
+                observed=False
+            ).size().reset_index(name='Headcount')
+            
+            tenure_comp_chart = alt.Chart(tenure_comp).mark_bar(cornerRadiusEnd=3).encode(
+                y=alt.Y('Tenure_Bracket:N', sort=tenure_labels, title='Company Tenure Milestone'),
+                x=alt.X('Headcount:Q', title='Employee Count'),
+                color=alt.Color(
+                    'Employment_Status:N', 
+                    scale=alt.Scale(domain=['Active Staff', 'Attrited Loss'], range=['#2ca02c', '#d62728']),
+                    title='Status'
+                ),
+                yOffset='Employment_Status:N', # Clusters Active vs Attrited bars side-by-side
+                tooltip=['Tenure_Bracket', 'Employment_Status', alt.Tooltip('Headcount:Q', format=',d')]
+            ).properties(height=280)
+            
+            st.altair_chart(tenure_comp_chart, use_container_width=True)
+        
+        st.markdown("---")
+
+        # =========================================================================
+              # --- ROW 3: SIDE-BY-SIDE AGE & MARITAL STATUS COMPARISON ---
+              # =========================================================================
+        st.markdown("### Lifecycle Vulnerabilities: Age & Marital Dynamics")
+              
+        demog_col3, demog_col4 = st.columns(2)
+        
+        # --- LEFT CHART: AGE BRACKET MATRIX ---
+        with demog_col3:
+            st.markdown("#### Headcount Status vs Age Generational Profile")
+            
+            # Establish standard HR generational age brackets
+            age_bins = [0, 24, 34, 44, 54, 120]
+            age_labels = ['Under 25', '25-34', '35-44', '45-54', '55+']
+            
+            df_demographics_master['Age_Bracket'] = pd.cut(
+                df_demographics_master['Age'], 
+                bins=age_bins, 
+                labels=age_labels
+            )
+            
+            age_comp = df_demographics_master.groupby(
+                ['Age_Bracket', 'Employment_Status'], 
+                observed=False
+            ).size().reset_index(name='Headcount')
+            
+            age_comp_chart = alt.Chart(age_comp).mark_bar(cornerRadiusEnd=3).encode(
+                y=alt.Y('Age_Bracket:N', sort=age_labels, title='Age Bracket Profile'),
+                x=alt.X('Headcount:Q', title='Employee Count'),
+                color=alt.Color(
+                    'Employment_Status:N', 
+                    scale=alt.Scale(domain=['Active Staff', 'Attrited Loss'], range=['#2ca02c', '#d62728']),
+                    legend=None # Hide legend since it mirrors the chart right next to it
+                ),
+                yOffset='Employment_Status:N', # Clusters Active vs Attrited bars side-by-side
+                tooltip=['Age_Bracket', 'Employment_Status', alt.Tooltip('Headcount:Q', format=',d')]
+            ).properties(height=280)
+            
+            st.altair_chart(age_comp_chart, use_container_width=True)
+
+        # --- RIGHT CHART: MARITAL STATUS MATRIX ---
+        with demog_col4:
+            st.markdown("#### Headcount Status vs Marital Stability Mix")
+            
+            marital_comp = df_demographics_master.groupby(
+                ['MaritalStatus', 'Employment_Status']
+            ).size().reset_index(name='Headcount')
+            
+            marital_comp_chart = alt.Chart(marital_comp).mark_bar(cornerRadiusEnd=3).encode(
+                y=alt.Y('MaritalStatus:N', sort='-x', title='Marital Status Category'),
+                x=alt.X('Headcount:Q', title='Employee Count'),
+                color=alt.Color(
+                    'Employment_Status:N', 
+                    scale=alt.Scale(domain=['Active Staff', 'Attrited Loss'], range=['#2ca02c', '#d62728']),
+                    title='Status'
+                ),
+                yOffset='Employment_Status:N', # Clusters Active vs Attrited bars side-by-side
+                tooltip=['MaritalStatus', 'Employment_Status', alt.Tooltip('Headcount:Q', format=',d')]
+            ).properties(height=280)
+            
+            st.altair_chart(marital_comp_chart, use_container_width=True)
+
+        st.markdown("---")
+
+        with st.expander("🔍 Monthly Aggregates Table"):
+            disp = timeline_df.copy()
+            disp['Attrition_Rate_Percent'] = disp['Attrition_Rate_Percent'].map('{:,.2f}%'.format)
+            st.dataframe(disp.drop(columns=['Sort_Key'], errors='ignore'), use_container_width=True)
 
 
 
