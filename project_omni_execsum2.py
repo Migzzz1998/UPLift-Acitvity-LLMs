@@ -872,8 +872,8 @@ with st.sidebar:
     page = st.radio(
         "NAVIGATION",
         ["📊 Executive Summary", "🎯 Attrition Drivers", "⚖️ Wellbeing/Performance",
-         "📈 Predictive Analytics", "👥 Employees to Review", "🔮 Predict Employee",
-         "💰 Attrition Simulator", "🏆 Model Lab"],
+         "📈 AI Model Intelligence", "👥 Employees to Review", "🔮 Predict Employee",
+         "💰 Attrition Simulator"],
         label_visibility="collapsed",
     )
 
@@ -1009,220 +1009,330 @@ def risk_color(pct):
 # ============================================================
 # PAGE 1 ── DASHBOARD
 # ============================================================
-if page == "📈 Predictive Analytics":
-    st.markdown("""
+if page == "📈 AI Model Intelligence":
+    # ── Run model comparison keyed to active model selection ──
+    with st.spinner("Training & benchmarking models…"):
+        (results_df, trained_models, best_name, best_model_obj,
+         best_thresh_val, ML_FEATURES, scaler, y_te, roc_data) = run_model_comparison(hash(str(df.shape)))
+
+    # Active model from sidebar selector
+    _sel_key = selected_model_name  # sidebar selectbox value
+    # Map sidebar catalogue name → leaderboard model name
+    _name_map = {
+        "🌲 Random Forest (Recall-Tuned)": "Random Forest (Recall-Tuned)",
+        "🌲 Random Forest (Default)":      "Random Forest (Default)",
+        "⚡ Gradient Boosting":            "Gradient Boosting",
+        "🚀 Extra Trees":                  "Extra Trees",
+        "🔥 AdaBoost":                     "AdaBoost",
+        "📐 Logistic Regression":          "Logistic Regression",
+        "📏 SVM (RBF Kernel)":             "SVM (RBF Kernel)",
+        "🌿 Decision Tree":                "Decision Tree",
+    }
+    _active_model_name = _name_map.get(_sel_key, best_name)
+    # Fall back to best if selected not in trained set
+    if _active_model_name not in trained_models:
+        _active_model_name = best_name
+
+    _active_clf, _active_proba, _active_preds, _active_thresh, _ = trained_models[_active_model_name]
+    _active_row = results_df[results_df["Model"] == _active_model_name].iloc[0]
+
+    PALETTE = {
+        "Random Forest (Recall-Tuned)": "#2DD4BF",
+        "Random Forest (Default)":      "#60A5FA",
+        "Gradient Boosting":            "#A78BFA",
+        "Extra Trees":                  "#FBBF24",
+        "AdaBoost":                     "#F472B6",
+        "Decision Tree":                "#A3E635",
+        "Logistic Regression":          "#F87171",
+        "SVM (RBF Kernel)":             "#FB923C",
+    }
+    _active_color = PALETTE.get(_active_model_name, "#60A5FA")
+
+    # ── Page Header ──
+    st.markdown(f"""
     <div class='page-header'>
-        <h1>📈 Predictive Analytics</h1>
-        <div class='ph-sub'>Why Recall was chosen · Feature drivers · Model comparison · Deep-dive analysis</div>
+        <h1>📈 AI Model Intelligence</h1>
+        <div class='ph-sub'>
+            Active model: <b style='color:{_active_color}'>{_active_model_name}</b>
+            &nbsp;·&nbsp; All charts, scores and risk flags update with your model selection
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Model Performance Banner ──
-    r = model_metrics["report"]
-    m1, m2, m3, m4 = st.columns(4)
-    with m1: st.metric("Model AUC", model_metrics["auc"], delta="vs 0.5 baseline")
-    with m2: st.metric("Precision", f"{r.get('1', {}).get('precision', 0):.2%}")
-    with m3: st.metric("Recall",    f"{r.get('1', {}).get('recall', 0):.2%}")
-    with m4: st.metric("F1 Score",  f"{r.get('1', {}).get('f1-score', 0):.2%}")
+    # ── SECTION 1: Active Model KPIs ──
+    st.markdown("#### Active Model Performance")
+    k1, k2, k3, k4, k5 = st.columns(5)
+    for col, label, val, delta in [
+        (k1, "Accuracy",   f"{_active_row['Accuracy']:.2%}",   None),
+        (k2, "Recall",     f"{_active_row['Recall']:.2%}",     "want high ↑"),
+        (k3, "Precision",  f"{_active_row['Precision']:.2%}",  None),
+        (k4, "F1 Score",   f"{_active_row['F1 Score']:.2%}",   None),
+        (k5, "ROC AUC",    f"{_active_row['ROC AUC']:.3f}",    None),
+    ]:
+        with col: st.metric(label, val, delta)
 
     st.divider()
 
-    # ── Why Recall? Rationale section ──
-    with st.expander("📖 Why did we choose Recall over Accuracy or Precision?", expanded=True):
-        ra, rb = st.columns([1, 1])
-        with ra:
-            st.markdown("""
-<div style='background:#111827;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:18px 20px'>
-<div style='font-size:0.75rem;color:#8B95A8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px'>The Core Problem</div>
-<p style='color:#F0F4FF;font-size:0.95rem;line-height:1.65'>
-In HR attrition prediction, the cost of <b style='color:#F87171'>missing</b> an employee who
-will leave is far higher than the cost of <b style='color:#FBBF24'>incorrectly flagging</b>
-someone who stays.
-</p>
-<p style='color:#8B95A8;font-size:0.85rem;margin-top:10px'>
-A missed leaver = lost knowledge, replacement cost (50–200% of salary), project disruption,
-and team morale damage. A false alarm = one extra retention conversation.
-</p>
-</div>
-            """, unsafe_allow_html=True)
-        with rb:
-            # Metric comparison mini-table as HTML
-            st.markdown("""
-<div style='background:#111827;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:18px 20px'>
-<div style='font-size:0.75rem;color:#8B95A8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px'>Metric Decision Matrix</div>
-<table style='width:100%;border-collapse:collapse;font-size:0.82rem'>
-<tr style='border-bottom:1px solid rgba(255,255,255,0.07)'>
-  <th style='color:#8B95A8;padding:6px 8px;text-align:left'>Metric</th>
-  <th style='color:#8B95A8;padding:6px 8px;text-align:left'>What it measures</th>
-  <th style='color:#8B95A8;padding:6px 8px;text-align:left'>Why not primary?</th>
-</tr>
-<tr style='border-bottom:1px solid rgba(255,255,255,0.04)'>
-  <td style='color:#FBBF24;padding:6px 8px;font-weight:600'>Accuracy</td>
-  <td style='color:#F0F4FF;padding:6px 8px'>Overall correct predictions</td>
-  <td style='color:#8B95A8;padding:6px 8px'>Misleading on imbalanced data (84% stay → model can score 84% by predicting "No" always)</td>
-</tr>
-<tr style='border-bottom:1px solid rgba(255,255,255,0.04)'>
-  <td style='color:#60A5FA;padding:6px 8px;font-weight:600'>Precision</td>
-  <td style='color:#F0F4FF;padding:6px 8px'>Of those flagged, how many truly leave</td>
-  <td style='color:#8B95A8;padding:6px 8px'>Optimising precision makes the model conservative — it misses real leavers to avoid false alarms</td>
-</tr>
-<tr style='border-bottom:1px solid rgba(255,255,255,0.04)'>
-  <td style='color:#A78BFA;padding:6px 8px;font-weight:600'>F1 Score</td>
-  <td style='color:#F0F4FF;padding:6px 8px'>Balance of precision & recall</td>
-  <td style='color:#8B95A8;padding:6px 8px'>Good general metric but treats both error types equally — not appropriate here</td>
-</tr>
-<tr>
-  <td style='color:#2DD4BF;padding:6px 8px;font-weight:700'>✅ Recall</td>
-  <td style='color:#F0F4FF;padding:6px 8px'>Of all who actually leave, how many did we catch</td>
-  <td style='color:#2DD4BF;padding:6px 8px;font-weight:600'>← PRIMARY GOAL: minimise missed leavers</td>
-</tr>
-</table>
-</div>
-            """, unsafe_allow_html=True)
+    # ── SECTION 2: Leaderboard + ROC side by side ──
+    _lb_col, _roc_col = st.columns([1.1, 0.9])
 
-        st.markdown("""
-<div style='background:rgba(45,212,191,0.06);border:1px solid rgba(45,212,191,0.2);border-radius:10px;
-padding:12px 16px;margin-top:12px;font-size:0.85rem;color:#8B95A8'>
-<b style='color:#2DD4BF'>Bottom line:</b> We use <b style='color:#2DD4BF'>Recall as our champion metric</b>
-and tune the decision threshold to achieve ≥80% recall, even if that means some false alarms.
-Every employee flagged as high-risk gets a targeted retention conversation — a low-cost intervention
-vs the high cost of attrition.
-</div>
-        """, unsafe_allow_html=True)
+    with _lb_col:
+        st.markdown("**📋 Model Leaderboard** — sorted by Recall")
+
+        def _hl_row(row):
+            if row["Model"] == _active_model_name:
+                return [f"background-color:rgba({','.join(str(int(c*255)) for c in plt.matplotlib.colors.to_rgb(_active_color))},0.18);color:#F0F4FF;font-weight:700"] * len(row)
+            if row.name == 1:
+                return ["background-color:rgba(45,212,191,0.10);color:#F0F4FF"] * len(row)
+            return ["background-color:#111827;color:#F0F4FF"] * len(row)
+
+        def _cr(val):
+            try:
+                v = float(val)
+                if v >= 0.80: return "color:#2DD4BF;font-weight:700"
+                if v >= 0.65: return "color:#FBBF24"
+                return "color:#F87171"
+            except Exception: return ""
+
+        styled_lb = (results_df[["Rank","Model","Threshold","Recall","Precision","F1 Score","ROC AUC"]].style
+            .apply(_hl_row, axis=1)
+            .map(_cr, subset=["Recall"])
+            .set_properties(**{"background-color":"#111827","color":"#F0F4FF","border-color":"rgba(255,255,255,0.05)"})
+            .set_table_styles([
+                {"selector":"th","props":[("background-color","#1a2234"),("color","#8B95A8"),
+                 ("font-size","0.72rem"),("text-transform","uppercase"),("letter-spacing","0.06em"),
+                 ("padding","6px 10px"),("border-bottom","1px solid rgba(255,255,255,0.08)")]},
+                {"selector":"td","props":[("padding","6px 10px"),
+                 ("border-bottom","1px solid rgba(255,255,255,0.03)")]},
+            ])
+            .format({"Recall":"{:.2%}","Precision":"{:.2%}","F1 Score":"{:.2%}",
+                     "ROC AUC":"{:.3f}","Threshold":"{:.3f}"})
+        )
+        st.dataframe(styled_lb, use_container_width=True, height=310)
+
+    with _roc_col:
+        st.markdown("**ROC Curves — all models**")
+        fig, ax = plt.subplots(figsize=(5, 4))
+        ax.plot([0,1],[0,1],"--",color="#444",linewidth=0.9,label="Baseline")
+        for mname,(fpr,tpr) in roc_data.items():
+            auc_val = results_df[results_df["Model"]==mname]["ROC AUC"].values[0]
+            is_active = (mname == _active_model_name)
+            lw = 2.8 if is_active else 1.0
+            alpha = 1.0 if is_active else 0.45
+            label_s = mname.split("(")[0].strip()
+            ax.plot(fpr,tpr,color=PALETTE.get(mname,"#888"),linewidth=lw,alpha=alpha,
+                    label=f"{label_s} ({auc_val:.3f})")
+        ax.set_xlabel("False Positive Rate",fontsize=8)
+        ax.set_ylabel("True Positive Rate",fontsize=8)
+        ax.set_title("ROC Curves",fontsize=9)
+        ax.legend(fontsize=6,facecolor="#111827",labelcolor="#F0F4FF",framealpha=0.9,loc="lower right")
+        apply_dark_style(fig,[ax])
+        st.pyplot(fig,use_container_width=True)
+        plt.close(fig)
 
     st.divider()
 
-    # ── Model comparison bar chart (Predictive Analytics summary) ──
-    st.subheader("🏁 Model Comparison — Predictive Performance")
+    # ── SECTION 3: Recall/Precision bars + Confusion Matrix ──
+    _bar_col, _cm_col = st.columns(2)
+
+    with _bar_col:
+        st.markdown("**Recall vs Precision — all models**")
+        models_short = [m.replace(" (Recall-Tuned)"," ★").replace(" (Default)","") for m in results_df["Model"]]
+        x = np.arange(len(models_short)); w = 0.36
+        fig, ax = plt.subplots(figsize=(5, 3.5))
+        b1 = ax.bar(x-w/2, results_df["Recall"].values,    w, color="#2DD4BF", alpha=0.85, label="Recall",    edgecolor="none")
+        b2 = ax.bar(x+w/2, results_df["Precision"].values, w, color="#60A5FA", alpha=0.85, label="Precision", edgecolor="none")
+        # Highlight active model bars
+        _ai = list(results_df["Model"]).index(_active_model_name) if _active_model_name in list(results_df["Model"]) else -1
+        if _ai >= 0:
+            for _bset in [b1, b2]:
+                _bset[_ai].set_edgecolor(_active_color)
+                _bset[_ai].set_linewidth(2)
+        ax.axhline(0.80,color="#FBBF24",linewidth=1.2,linestyle="--",label="Recall target")
+        ax.set_xticks(x); ax.set_xticklabels(models_short,fontsize=6,rotation=20,ha="right")
+        ax.set_ylim(0,1.12); ax.set_ylabel("Score",fontsize=8)
+        ax.legend(fontsize=7,facecolor="#111827",labelcolor="#F0F4FF")
+        for bars in [b1,b2]:
+            for bar in bars:
+                ax.text(bar.get_x()+bar.get_width()/2, bar.get_height()+0.01,
+                        f"{bar.get_height():.0%}", ha="center", va="bottom", color="#F0F4FF", fontsize=6)
+        apply_dark_style(fig,[ax])
+        st.pyplot(fig,use_container_width=True)
+        plt.close(fig)
+
+    with _cm_col:
+        st.markdown(f"**Confusion Matrix — {_active_model_name.split('(')[0].strip()}**")
+        cm = confusion_matrix(y_te, _active_preds)
+        cm_labels = [
+            ["True Neg\n(Kept)", "False Pos\n(Wrongly flagged)"],
+            ["False Neg\n(Missed ❌)", "True Pos\n(Caught ✅)"],
+        ]
+        colors_cm = [["#1a2234","#2d1f1f"],["#3d1a1a","#1a3d2b"]]
+        fig, ax = plt.subplots(figsize=(5, 3.5))
+        for i in range(2):
+            for j in range(2):
+                ax.add_patch(plt.Rectangle((j-0.5,1.5-i),1,1,color=colors_cm[i][j],zorder=0))
+                vc = "#F87171" if (i==1 and j==0) else ("#2DD4BF" if (i==1 and j==1) else "#F0F4FF")
+                ax.text(j,1-i,str(cm[i,j]),ha="center",va="center",fontsize=22,fontweight="bold",color=vc,zorder=2)
+                ax.text(j,1-i-0.33,cm_labels[i][j],ha="center",va="center",fontsize=6.5,color="#8B95A8",zorder=2)
+        ax.set_xlim(-0.5,1.5); ax.set_ylim(-0.5,1.5)
+        ax.set_xticks([0,1]); ax.set_xticklabels(["Predicted: Stay","Predicted: Leave"],fontsize=8)
+        ax.set_yticks([0,1]); ax.set_yticklabels(["Actual: Leave","Actual: Stay"],fontsize=8)
+        ax.set_title(f"@ threshold={_active_thresh:.2f}",fontsize=9,pad=8)
+        apply_dark_style(fig,[ax])
+        for spine in ax.spines.values(): spine.set_visible(False)
+        st.pyplot(fig,use_container_width=True)
+        plt.close(fig)
+
+    st.divider()
+
+    # ── SECTION 4: Feature Importance + Factor Deep-Dive ──
+    _imp_col, _dive_col = st.columns([1, 1])
+
+    with _imp_col:
+        st.markdown("**Feature Importance — active model**")
+        # Use feature importances if available, else coefficients
+        if hasattr(_active_clf, "feature_importances_"):
+            _imp_vals = _active_clf.feature_importances_
+        elif hasattr(_active_clf, "coef_"):
+            _imp_vals = np.abs(_active_clf.coef_[0])
+        else:
+            _imp_vals = np.ones(len(ML_FEATURES)) / len(ML_FEATURES)
+        importances = pd.Series(_imp_vals, index=ML_FEATURES).sort_values(ascending=True)
+        colors_imp  = [ACCENT_PALETTE[i % len(ACCENT_PALETTE)] for i in range(len(importances))]
+        # Highlight active-model colour on top bar
+        colors_imp[-1] = _active_color
+
+        fig, ax = plt.subplots(figsize=(5, 3.8))
+        bars_imp = ax.barh(importances.index, importances.values, color=colors_imp, edgecolor="none", height=0.55)
+        ax.set_xlabel("Importance",fontsize=8)
+        ax.set_title("Feature Importance",fontsize=9)
+        for bar, val in zip(bars_imp, importances.values):
+            ax.text(val+0.0005,bar.get_y()+bar.get_height()/2,f"{val:.3f}",va="center",color="#F0F4FF",fontsize=7)
+        apply_dark_style(fig,[ax])
+        st.pyplot(fig,use_container_width=True)
+        plt.close(fig)
+
+        top3 = importances.sort_values(ascending=False).head(3)
+        pills = "".join(f"<span class='insight-pill'>🔑 {f} ({v:.1%})</span>" for f,v in top3.items())
+        st.markdown(pills, unsafe_allow_html=True)
+
+    with _dive_col:
+        st.markdown("**Factor Deep-Dive**")
+        sel_feat = st.selectbox("Select feature:", ML_FEATURES, key="feat_dive")
+        fig, ax = plt.subplots(figsize=(5, 3.8))
+        for label, color in [("No","#2DD4BF"),("Yes","#F87171")]:
+            vals = filtered_df[filtered_df["Attrition"]==label][sel_feat].dropna()
+            ax.hist(vals,bins=22,alpha=0.6,color=color,label=f"Attrition:{label}",edgecolor="none")
+        ax.legend(fontsize=7,facecolor="#111827",labelcolor="#F0F4FF")
+        ax.set_xlabel(sel_feat,fontsize=8)
+        ax.set_title(f"{sel_feat} by Attrition",fontsize=9)
+        apply_dark_style(fig,[ax])
+        st.pyplot(fig,use_container_width=True)
+        plt.close(fig)
+
+    st.divider()
+
+    # ── SECTION 5: Live Threshold Tuner ──
+    st.markdown("#### 🎚 Live Threshold Tuner")
     st.markdown("""
     <div class='section-note'>
-        Five models were benchmarked. Bars show Recall (primary), Precision, and ROC AUC side by side.
-        Go to <b>🏆 Model Lab</b> for the interactive leaderboard, ROC curves, and threshold tuner.
+        Drag to trade off <b style='color:#2DD4BF'>Recall</b> (catching leavers) vs
+        <b style='color:#60A5FA'>Precision</b> (reducing false alarms).
+        Metrics update live for the <b>active model</b>.
     </div>
     """, unsafe_allow_html=True)
 
-    with st.spinner("Loading model comparison…"):
-        try:
-            (cmp_results_df, _, cmp_best_name, _, _, _, _, _, _) = run_model_comparison(hash(str(df.shape)))
+    thresh_slider = st.slider("Decision Threshold", 0.10, 0.90,
+                               float(round(_active_thresh, 2)), step=0.01, key="thresh_slider")
+    preds_tuned   = (_active_proba >= thresh_slider).astype(int)
 
-            model_names_short = [m.replace(" (Recall-Tuned)", " ★").replace(" (Default)", " (base)")
-                                 for m in cmp_results_df["Model"]]
-            x_pos   = np.arange(len(model_names_short))
-            w       = 0.26
-            recalls   = cmp_results_df["Recall"].values
-            precis    = cmp_results_df["Precision"].values
-            aucs      = cmp_results_df["ROC AUC"].values
+    t1,t2,t3,t4 = st.columns(4)
+    with t1: st.metric("Recall",    f"{recall_score(y_te,preds_tuned,zero_division=0):.2%}","↑ want high")
+    with t2: st.metric("Precision", f"{precision_score(y_te,preds_tuned,zero_division=0):.2%}")
+    with t3: st.metric("F1 Score",  f"{f1_score(y_te,preds_tuned,zero_division=0):.2%}")
+    with t4: st.metric("Flagged",   f"{int(preds_tuned.sum()):,}", f"of {len(preds_tuned):,}")
 
-            fig, ax = plt.subplots(figsize=(11, 5))
-            b1 = ax.bar(x_pos - w,   recalls, w, color="#2DD4BF", alpha=0.85, label="Recall",    edgecolor="none")
-            b2 = ax.bar(x_pos,       precis,  w, color="#60A5FA", alpha=0.85, label="Precision", edgecolor="none")
-            b3 = ax.bar(x_pos + w,   aucs,    w, color="#A78BFA", alpha=0.85, label="ROC AUC",   edgecolor="none")
-            ax.axhline(0.80, color="#FBBF24", linewidth=1.3, linestyle="--", label="Recall target (80%)")
-            ax.set_xticks(x_pos)
-            ax.set_xticklabels(model_names_short, fontsize=8)
-            ax.set_ylim(0, 1.08)
-            ax.set_ylabel("Score")
-            ax.set_title("All Models — Recall · Precision · ROC AUC Comparison")
-            ax.legend(fontsize=9, facecolor="#111827", labelcolor="#F0F4FF")
-            for bars in [b1, b2, b3]:
-                for bar in bars:
-                    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.008,
-                            f"{bar.get_height():.0%}", ha="center", va="bottom",
-                            color="#F0F4FF", fontsize=7)
-            apply_dark_style(fig, [ax])
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
-
-            # Winner callout
-            best_r = cmp_results_df.iloc[0]
-            st.markdown(f"""
-<div style='background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.25);border-radius:10px;
-padding:12px 16px;font-size:0.85rem;color:#8B95A8;margin-top:4px'>
-<b style='color:#2DD4BF'>🥇 Champion:</b> <b style='color:#F0F4FF'>{best_r["Model"]}</b>
-— Recall <b style='color:#2DD4BF'>{best_r["Recall"]:.2%}</b>
-· Precision <b style='color:#60A5FA'>{best_r["Precision"]:.2%}</b>
-· ROC AUC <b style='color:#A78BFA'>{best_r["ROC AUC"]:.3f}</b>
-· Threshold tuned to <b style='color:#FBBF24'>{best_r["Threshold"]:.2f}</b>
-</div>
-            """, unsafe_allow_html=True)
-        except Exception as e:
-            st.warning(f"Model comparison requires the full dataset to be loaded. ({e})")
-
-    st.divider()
-
-    # ── Feature Importances ──
-    importances = pd.Series(model.feature_importances_, index=FEATURES).sort_values(ascending=True)
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    colors = [ACCENT_PALETTE[i % len(ACCENT_PALETTE)] for i in range(len(importances))]
-    bars = ax.barh(importances.index, importances.values, color=colors, edgecolor="none", height=0.55)
-    ax.set_xlabel("Importance Score")
-    ax.set_title("Feature Importance — Key Risk Indicators")
-    for bar, val in zip(bars, importances.values):
-        ax.text(val + 0.001, bar.get_y() + bar.get_height()/2,
-                f"{val:.3f}", va="center", color="#F0F4FF", fontsize=9)
-    apply_dark_style(fig, [ax])
-    st.pyplot(fig, use_container_width=True)
+    prec_c,rec_c,thresh_c = precision_recall_curve(y_te, _active_proba)
+    fig,ax = plt.subplots(figsize=(10,3))
+    ax.plot(thresh_c,rec_c[:-1], color="#2DD4BF",linewidth=2,label="Recall")
+    ax.plot(thresh_c,prec_c[:-1],color="#60A5FA",linewidth=2,label="Precision")
+    ax.axvline(thresh_slider,color="#FBBF24",linewidth=1.5,linestyle="--",label=f"Threshold ({thresh_slider:.2f})")
+    ax.axhline(0.80,color="#F87171",linewidth=1,linestyle=":",alpha=0.7,label="Recall target (80%)")
+    ax.set_xlim(0,1); ax.set_ylim(0,1.05)
+    ax.set_xlabel("Threshold",fontsize=8); ax.set_ylabel("Score",fontsize=8)
+    ax.set_title(f"Precision–Recall Curve · {_active_model_name.split('(')[0].strip()}",fontsize=9)
+    ax.legend(fontsize=8,facecolor="#111827",labelcolor="#F0F4FF")
+    apply_dark_style(fig,[ax])
+    st.pyplot(fig,use_container_width=True)
     plt.close(fig)
 
-    # ── Insights Chips ──
-    top3 = importances.sort_values(ascending=False).head(3)
-    st.markdown("**Key findings:**")
-    pills = ""
-    for feat, score in top3.items():
-        pills += f"<span class='insight-pill'>🔑 {feat} ({score:.2%})</span>"
-    st.markdown(pills, unsafe_allow_html=True)
+    # Plain-language summary
+    rec_val = recall_score(y_te,preds_tuned,zero_division=0)
+    pre_val = precision_score(y_te,preds_tuned,zero_division=0)
+    flagged = int(preds_tuned.sum())
+    missed  = int(((y_te==1)&(preds_tuned==0)).sum())
+    st.markdown(
+        f"<div class='section-note'>"
+        f"<b>📢 At threshold {thresh_slider:.2f} with <span style='color:{_active_color}'>{_active_model_name.split('(')[0].strip()}</span>:</b><br>"
+        f"Catches <b style='color:#2DD4BF'>{rec_val:.0%}</b> of actual leavers · "
+        f"Flags <b style='color:#60A5FA'>{flagged:,}</b> employees · "
+        f"<b style='color:#FBBF24'>{pre_val:.0%}</b> genuine risks · "
+        f"<b style='color:#F87171'>{missed}</b> leavers missed."
+        f"</div>",
+        unsafe_allow_html=True
+    )
 
-    st.divider()
+    # ── SECTION 6: Why Recall (collapsible) ──
+    with st.expander("📖 Why Recall over Accuracy / Precision?", expanded=False):
+        _ra, _rb = st.columns(2)
+        with _ra:
+            st.markdown("""
+<div style='background:#111827;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px 18px'>
+<div style='font-size:0.72rem;color:#8B95A8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px'>The Core Problem</div>
+<p style='color:#F0F4FF;font-size:0.88rem;line-height:1.6'>
+Missing a leaver costs <b style='color:#F87171'>50–200% of annual salary</b> in replacement,
+lost knowledge, and team disruption. A false alarm costs one retention conversation.
+</p>
+<p style='color:#8B95A8;font-size:0.8rem;margin-top:8px'>
+We therefore tune the threshold to maximise recall ≥ 80%, accepting some false positives.
+</p>
+</div>""", unsafe_allow_html=True)
+        with _rb:
+            st.markdown("""
+<div style='background:#111827;border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px 18px'>
+<table style='width:100%;border-collapse:collapse;font-size:0.78rem'>
+<tr style='border-bottom:1px solid rgba(255,255,255,0.07)'>
+  <th style='color:#8B95A8;padding:5px 7px;text-align:left'>Metric</th>
+  <th style='color:#8B95A8;padding:5px 7px;text-align:left'>Risk</th>
+</tr>
+<tr><td style='color:#FBBF24;padding:5px 7px;font-weight:600'>Accuracy</td>
+    <td style='color:#8B95A8;padding:5px 7px'>Misleading on 84/16 imbalanced classes</td></tr>
+<tr><td style='color:#60A5FA;padding:5px 7px;font-weight:600'>Precision</td>
+    <td style='color:#8B95A8;padding:5px 7px'>Makes model conservative — misses real leavers</td></tr>
+<tr><td style='color:#A78BFA;padding:5px 7px;font-weight:600'>F1 Score</td>
+    <td style='color:#8B95A8;padding:5px 7px'>Treats both error types equally — wrong tradeoff</td></tr>
+<tr><td style='color:#2DD4BF;padding:5px 7px;font-weight:700'>✅ Recall</td>
+    <td style='color:#2DD4BF;padding:5px 7px;font-weight:600'>Minimises missed leavers — PRIMARY GOAL</td></tr>
+</table>
+</div>""", unsafe_allow_html=True)
 
-    # ── Deep Dive: Factor vs Attrition ──
-    st.subheader("Factor Deep-Dive")
-    sel_feat = st.selectbox("Select a factor to analyze:", FEATURES)
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.markdown(f"**{sel_feat} — Distribution by Attrition Status**")
-        fig, ax = plt.subplots(figsize=(6, 4))
-        for label, color in [("No", "#2DD4BF"), ("Yes", "#F87171")]:
-            vals = filtered_df[filtered_df["Attrition"] == label][sel_feat].dropna()
-            ax.hist(vals, bins=25, alpha=0.6, color=color, label=f"Attrition: {label}", edgecolor="none")
-        ax.legend(facecolor="#111827", labelcolor="#F0F4FF")
-        ax.set_xlabel(sel_feat)
-        apply_dark_style(fig, [ax])
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    with col_b:
-        st.markdown(f"**Median {sel_feat} by Attrition**")
-        meds = filtered_df.groupby("Attrition")[sel_feat].median()
-        fig, ax = plt.subplots(figsize=(6, 4))
-        ax.bar(meds.index, meds.values,
-               color=["#2DD4BF", "#F87171"], edgecolor="none", width=0.45)
-        ax.set_ylabel(f"Median {sel_feat}")
-        ax.set_title(f"Median {sel_feat} Comparison")
-        apply_dark_style(fig, [ax])
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    # ── Correlation Heatmap ──
-    with st.expander("🔥 Correlation Heatmap (numeric features)", expanded=False):
+    # ── Correlation Heatmap (collapsible) ──
+    with st.expander("🔥 Correlation Heatmap", expanded=False):
         num_cols = filtered_df.select_dtypes(include=np.number).columns.tolist()
         if len(num_cols) >= 2:
             corr = filtered_df[num_cols[:12]].corr()
-            fig, ax = plt.subplots(figsize=(10, 8))
+            fig, ax = plt.subplots(figsize=(9, 6))
             mask = np.triu(np.ones_like(corr, dtype=bool))
             sns.heatmap(corr, mask=mask, ax=ax, cmap="coolwarm", center=0,
-                        linewidths=0.4, linecolor="#0D1117",
-                        annot=True, fmt=".2f", annot_kws={"size": 7, "color": "#F0F4FF"},
-                        cbar_kws={"shrink": 0.8})
-            ax.set_title("Feature Correlation Matrix", color="#F0F4FF")
-            apply_dark_style(fig, [ax])
-            st.pyplot(fig, use_container_width=True)
+                        linewidths=0.3, linecolor="#0D1117",
+                        annot=True, fmt=".2f", annot_kws={"size":6,"color":"#F0F4FF"},
+                        cbar_kws={"shrink":0.7})
+            ax.set_title("Feature Correlation Matrix",color="#F0F4FF",fontsize=9)
+            apply_dark_style(fig,[ax])
+            st.pyplot(fig,use_container_width=True)
             plt.close(fig)
 
-# ============================================================
-# PAGE 3 ── RISK WATCHLIST
-# ============================================================
 elif page == "👥 Employees to Review":
     st.markdown("""
     <div class='page-header'>
@@ -1449,240 +1559,6 @@ elif page == "🔮 Predict Employee":
 # ATTRITION SIMULATOR — appended to Predict Employee page
 # ============================================================
 
-elif page == "🏆 Model Lab":
-    st.markdown("""
-    <div class='page-header'>
-        <h1>🏆 Model Lab — Recall Optimisation</h1>
-        <div class='ph-sub'>
-            Benchmarking every model to find the one with the highest recall —
-            so we catch as many at-risk employees as possible before they resign.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class='section-note'>
-        <b>🎯 Goal:</b> Maximise <b style='color:#2DD4BF'>Recall</b> — we would rather flag a safe
-        employee by mistake than miss someone who is about to leave.
-        The top-ranked model is automatically selected for the app.
-    </div>
-    """, unsafe_allow_html=True)
-
-    with st.spinner("Running full model benchmark…"):
-        (results_df, trained_models, best_name, best_model_obj,
-         best_thresh_val, ML_FEATURES, scaler, y_te, roc_data) = run_model_comparison(hash(str(df.shape)))
-
-    # -- Hero metric strip --
-    best_row = results_df.iloc[0]
-    h1, h2, h3, h4, h5 = st.columns(5)
-    for col, label, val, delta in [
-        (h1, "🥇 Best Model",  best_row["Model"].split("(")[0].strip(), None),
-        (h2, "🎯 Recall",      f"{best_row['Recall']:.2%}",    "Target ≥ 80%"),
-        (h3, "📐 Precision",   f"{best_row['Precision']:.2%}", "False-alarm rate"),
-        (h4, "📈 ROC AUC",     f"{best_row['ROC AUC']:.3f}",  "Discrimination power"),
-        (h5, "🔧 Threshold",   f"{best_row['Threshold']:.2f}", "Decision cutoff"),
-    ]:
-        with col:
-            st.metric(label, val, delta)
-
-    st.divider()
-
-    # -- Leaderboard --
-    st.subheader("📋 Full Model Leaderboard")
-
-    def highlight_leaderboard(row):
-        if row.name == 1:
-            return ["background-color: rgba(45,212,191,0.15); color: #F0F4FF; font-weight:700"] * len(row)
-        return ["background-color: #111827; color: #F0F4FF"] * len(row)
-
-    def color_recall(val):
-        try:
-            v = float(val)
-            if v >= 0.80: return "color: #2DD4BF; font-weight:700"
-            if v >= 0.65: return "color: #FBBF24"
-            return "color: #F87171"
-        except Exception:
-            return ""
-
-    styled_lb = (results_df.style
-        .apply(highlight_leaderboard, axis=1)
-        .map(color_recall, subset=["Recall"])
-        .set_properties(**{"background-color": "#111827", "color": "#F0F4FF",
-                           "border-color": "rgba(255,255,255,0.06)"})
-        .set_table_styles([
-            {"selector": "th", "props": [
-                ("background-color", "#1a2234"), ("color", "#8B95A8"),
-                ("font-size", "0.78rem"), ("text-transform", "uppercase"),
-                ("letter-spacing", "0.06em"), ("padding", "8px 14px"),
-                ("border-bottom", "1px solid rgba(255,255,255,0.1)"),
-            ]},
-            {"selector": "td", "props": [("padding", "9px 14px"),
-                ("border-bottom", "1px solid rgba(255,255,255,0.04)")]},
-        ])
-        .format({"Accuracy": "{:.2%}", "Precision": "{:.2%}", "Recall": "{:.2%}",
-                 "F1 Score": "{:.2%}", "ROC AUC": "{:.4f}", "Threshold": "{:.3f}"})
-    )
-    st.dataframe(styled_lb, use_container_width=True, height=240)
-
-    st.divider()
-
-    # -- Charts row --
-    PALETTE = {
-        "Random Forest (Recall-Tuned)": "#2DD4BF",
-        "Random Forest (Default)":      "#60A5FA",
-        "Gradient Boosting":            "#A78BFA",
-        "Extra Trees":                  "#FBBF24",
-        "AdaBoost":                     "#F472B6",
-        "Decision Tree":                "#A3E635",
-        "Logistic Regression":          "#F87171",
-        "SVM (RBF Kernel)":             "#FB923C",
-    }
-    col_left, col_right = st.columns(2)
-
-    with col_left:
-        st.markdown("**ROC Curves — all models**")
-        fig, ax = plt.subplots(figsize=(6, 5))
-        ax.plot([0, 1], [0, 1], "--", color="#444", linewidth=1, label="Random baseline")
-        for mname, (fpr, tpr) in roc_data.items():
-            auc_val = results_df[results_df["Model"] == mname]["ROC AUC"].values[0]
-            lw = 2.5 if mname == best_name else 1.2
-            label_short = mname.split("(")[0].strip()
-            ax.plot(fpr, tpr, color=PALETTE.get(mname, "#888"),
-                    linewidth=lw, label=f"{label_short} ({auc_val:.3f})")
-        ax.set_xlabel("False Positive Rate")
-        ax.set_ylabel("True Positive Rate (Recall)")
-        ax.set_title("ROC Curves")
-        ax.legend(fontsize=7, facecolor="#111827", labelcolor="#F0F4FF", framealpha=0.9)
-        apply_dark_style(fig, [ax])
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    with col_right:
-        st.markdown("**Recall vs Precision — all models**")
-        models_short = [m.replace(" (Recall-Tuned)", " ★").replace(" (Default)", "")
-                        for m in results_df["Model"]]
-        recalls    = results_df["Recall"].values
-        precisions = results_df["Precision"].values
-        x = np.arange(len(models_short))
-        w = 0.38
-        fig, ax = plt.subplots(figsize=(6, 5))
-        b1 = ax.bar(x - w/2, recalls,    w, color="#2DD4BF", alpha=0.85, label="Recall",    edgecolor="none")
-        b2 = ax.bar(x + w/2, precisions, w, color="#60A5FA", alpha=0.85, label="Precision", edgecolor="none")
-        ax.axhline(0.80, color="#FBBF24", linewidth=1.2, linestyle="--", label="Recall target (80%)")
-        ax.set_xticks(x)
-        ax.set_xticklabels(models_short, fontsize=7)
-        ax.set_ylabel("Score")
-        ax.set_title("Recall vs Precision by Model")
-        ax.set_ylim(0, 1.05)
-        ax.legend(fontsize=8, facecolor="#111827", labelcolor="#F0F4FF")
-        for bar in list(b1) + list(b2):
-            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
-                    f"{bar.get_height():.0%}", ha="center", va="bottom",
-                    color="#F0F4FF", fontsize=7)
-        apply_dark_style(fig, [ax])
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
-
-    st.divider()
-
-    # -- Confusion matrix --
-    st.subheader(f"🔬 Confusion Matrix — {best_name}")
-    best_entry = trained_models[best_name]
-    _, best_proba_arr, best_preds_arr, _, _ = best_entry
-    cm = confusion_matrix(y_te, best_preds_arr)
-    cm_labels = [
-        ["True Negative\n(Correctly kept)", "False Positive\n(Wrongly flagged)"],
-        ["False Negative\n(Missed leaver ❌)", "True Positive\n(Caught leaver ✅)"],
-    ]
-    colors_cm = [["#1a2234", "#2d1f1f"], ["#3d1a1a", "#1a3d2b"]]
-    fig, ax = plt.subplots(figsize=(6, 4.5))
-    for i in range(2):
-        for j in range(2):
-            ax.add_patch(plt.Rectangle((j - 0.5, 1.5 - i), 1, 1,
-                                        color=colors_cm[i][j], zorder=0))
-            val_color = ("#F87171" if (i == 1 and j == 0)
-                         else ("#2DD4BF" if (i == 1 and j == 1) else "#F0F4FF"))
-            ax.text(j, 1 - i, str(cm[i, j]), ha="center", va="center",
-                    fontsize=28, fontweight="bold", color=val_color, zorder=2)
-            ax.text(j, 1 - i - 0.32, cm_labels[i][j], ha="center", va="center",
-                    fontsize=7.5, color="#8B95A8", zorder=2)
-    ax.set_xlim(-0.5, 1.5)
-    ax.set_ylim(-0.5, 1.5)
-    ax.set_xticks([0, 1])
-    ax.set_xticklabels(["Predicted: Stay", "Predicted: Leave"])
-    ax.set_yticks([0, 1])
-    ax.set_yticklabels(["Actual: Leave", "Actual: Stay"])
-    ax.set_title(f"Confusion Matrix @ threshold = {best_thresh_val:.2f}", pad=12)
-    apply_dark_style(fig, [ax])
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
-
-    # -- Live threshold tuner --
-    st.divider()
-    st.subheader("🎚 Live Threshold Tuner")
-    st.markdown("""
-    <div class='section-note'>
-        Drag the slider to see how the decision threshold trades off
-        <b style='color:#2DD4BF'>Recall</b> (catching leavers) vs
-        <b style='color:#60A5FA'>Precision</b> (reducing false alarms).
-    </div>
-    """, unsafe_allow_html=True)
-
-    _, best_proba_t, _, _, _ = trained_models[best_name]
-    thresh_slider = st.slider("Decision Threshold", 0.10, 0.90,
-                               float(round(best_thresh_val, 2)), step=0.01,
-                               key="thresh_slider")
-    preds_tuned = (best_proba_t >= thresh_slider).astype(int)
-
-    t1, t2, t3, t4 = st.columns(4)
-    with t1: st.metric("Recall",    f"{recall_score(y_te, preds_tuned, zero_division=0):.2%}", "want high ↑")
-    with t2: st.metric("Precision", f"{precision_score(y_te, preds_tuned, zero_division=0):.2%}")
-    with t3: st.metric("F1 Score",  f"{f1_score(y_te, preds_tuned, zero_division=0):.2%}")
-    with t4: st.metric("Flagged",   f"{int(preds_tuned.sum()):,}", f"of {len(preds_tuned):,} employees")
-
-    # Precision-Recall curve with live cursor
-    prec_c, rec_c, thresh_c = precision_recall_curve(y_te, best_proba_t)
-    fig, ax = plt.subplots(figsize=(10, 3.5))
-    ax.plot(thresh_c, rec_c[:-1],  color="#2DD4BF", linewidth=2, label="Recall")
-    ax.plot(thresh_c, prec_c[:-1], color="#60A5FA", linewidth=2, label="Precision")
-    ax.axvline(thresh_slider, color="#FBBF24", linewidth=1.5, linestyle="--",
-               label=f"Current threshold ({thresh_slider:.2f})")
-    ax.axhline(0.80, color="#F87171", linewidth=1, linestyle=":", alpha=0.7,
-               label="Recall target (80%)")
-    ax.set_xlabel("Threshold")
-    ax.set_ylabel("Score")
-    ax.set_title("Precision & Recall vs Decision Threshold")
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1.05)
-    ax.legend(fontsize=9, facecolor="#111827", labelcolor="#F0F4FF")
-    apply_dark_style(fig, [ax])
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
-
-    # -- Plain-language summary --
-    st.divider()
-    rec_val  = recall_score(y_te, preds_tuned, zero_division=0)
-    pre_val  = precision_score(y_te, preds_tuned, zero_division=0)
-    flagged  = int(preds_tuned.sum())
-    missed   = int(((y_te == 1) & (preds_tuned == 0)).sum())
-
-    note = (
-        f"<div class='section-note'>"
-        f"<b>📢 Plain-language interpretation at threshold {thresh_slider:.2f}:</b><br><br>"
-        f"Out of every 100 employees who actually plan to leave, "
-        f"the model catches <b style='color:#2DD4BF'>{rec_val:.0%}</b> of them.<br>"
-        f"It is flagging <b style='color:#60A5FA'>{flagged:,}</b> employees total — "
-        f"of which <b style='color:#FBBF24'>{pre_val:.0%}</b> are genuine risks.<br>"
-        f"<b style='color:#F87171'>{missed}</b> at-risk employees are currently slipping through undetected."
-        f"</div>"
-    )
-    st.markdown(note, unsafe_allow_html=True)
-
-# ============================================================
-# PAGE — EXECUTIVE SUMMARY (from Project Omni)
-# ============================================================
 elif page == "📊 Executive Summary":
     st.header("📊 Executive Summary Dashboard (Active Headcount Engine)")
     st.markdown("---")
