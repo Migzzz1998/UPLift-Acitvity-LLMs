@@ -177,27 +177,29 @@ header[data-testid="stHeader"]::after { display: none !important; }
 /* ── Nav radio group ── */
 [data-testid="stSidebar"] .stRadio > label { display: none !important; }
 [data-testid="stSidebar"] .stRadio [role="radiogroup"] {
-    display: flex !important; flex-direction: column !important; gap: 2px !important;
+    display: flex !important; flex-direction: column !important; gap: 0px !important;
 }
 [data-testid="stSidebar"] .stRadio input[type="radio"] { display: none !important; }
 [data-testid="stSidebar"] .stRadio label {
-    font-size: 0.86rem !important; font-weight: 500 !important;
-    color: #4A5568 !important; padding: 9px 12px !important;
-    border-radius: 10px !important; cursor: pointer !important;
+    font-size: 0.88rem !important; font-weight: 400 !important;
+    color: #8a8a8a !important; padding: 11px 10px !important;
+    border-radius: 0px !important; cursor: pointer !important;
     transition: all 0.15s ease !important;
-    display: flex !important; align-items: center !important; gap: 9px !important;
-    border: 1px solid transparent !important;
+    display: flex !important; align-items: center !important; gap: 10px !important;
+    border: none !important;
     letter-spacing: 0.01em !important; width: 100% !important;
+    background: transparent !important;
 }
 [data-testid="stSidebar"] .stRadio label:hover {
-    background: rgba(96,165,250,0.07) !important;
-    color: #94A3B8 !important;
-    border-color: rgba(96,165,250,0.12) !important;
+    background: transparent !important;
+    color: #cccccc !important;
+    border: none !important;
 }
 [data-testid="stSidebar"] .stRadio label[data-baseweb] {
-    background: linear-gradient(90deg, rgba(96,165,250,0.12), rgba(167,139,250,0.08)) !important;
-    color: #93C5FD !important;
-    border-color: rgba(96,165,250,0.22) !important;
+    background: transparent !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    border: none !important;
 }
 
 /* ── Sidebar dividers ── */
@@ -837,64 +839,40 @@ with st.sidebar:
     st.markdown("<div class='nav-section-label'>Navigation</div>", unsafe_allow_html=True)
     page = st.radio(
         "NAVIGATION",
-        ["📊 Executive Summary", "🎯 Attrition Drivers", "⚖️ Wellbeing/Performance",
-         "📈 AI Model Intelligence", "👥 Employees to Review", "🔮 Risk Predictor [Beta]",
-         "💰 Attrition Simulator"],
+        ["Executive Summary", "Attrition Drivers", "Wellbeing/Performance",
+         "AI Model Intelligence", "Employees to Review", "Risk Predictor [Beta]",
+         "Attrition Simulator"],
         label_visibility="collapsed",
     )
 
-    st.divider()
+    if page in ["AI Model Intelligence", "Risk Predictor [Beta]"]:
+        st.divider()
+        st.markdown("<div class='nav-section-label'>Active Model</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='nav-section-label'>Active Model</div>", unsafe_allow_html=True)
-    selected_model_name = st.selectbox(
-        "Active Model",
-        list(MODEL_CATALOGUE.keys()),
-        index=0,
-        label_visibility="collapsed",
-        key="active_model_select",
-        help="Changes the model used in Predict Employee and Employees to Review",
-    )
-    sel_meta = MODEL_CATALOGUE[selected_model_name]
-    tag_html = (f"<span class='model-tag' style='background:rgba(45,212,191,0.12);"
-                f"color:{sel_meta['tag_color']}'>{sel_meta.get('tag','')}</span>"
-                if sel_meta.get('tag') else "")
-    st.markdown(f"""
-    <div class='model-card'>
-        <div class='model-card-name'>{selected_model_name.split(' ', 1)[1] if ' ' in selected_model_name else selected_model_name}</div>
-        {tag_html}
-        <div class='model-card-desc'>{sel_meta['desc']}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.divider()
-
-    st.markdown("<div class='nav-section-label'>Filters</div>", unsafe_allow_html=True)
-    with st.expander("🎚 Global Filters", expanded=False):
-        companies = ["All"] + sorted(df["Company"].unique().tolist()) if "Company" in df.columns else ["All"]
-        sel_company = st.selectbox("Company", companies)
-
-        depts = ["All"] + sorted(df["Department"].unique().tolist())
-        sel_dept = st.selectbox("Department", depts)
-
-        if "MonthlyIncome" in df.columns:
-            inc_range = st.slider(
-                "Monthly Income ($)",
-                int(df["MonthlyIncome"].min()),
-                int(df["MonthlyIncome"].max()),
-                (int(df["MonthlyIncome"].min()), int(df["MonthlyIncome"].max()))
-            )
-        else:
-            inc_range = (0, 99999)
+    if page in ["AI Model Intelligence", "Risk Predictor [Beta]"]:
+        selected_model_name = st.selectbox(
+            "Active Model",
+            list(MODEL_CATALOGUE.keys()),
+            index=0,
+            label_visibility="collapsed",
+            key="active_model_select",
+            help="Changes the model used in Predict Employee and Employees to Review",
+        )
+        sel_meta = MODEL_CATALOGUE[selected_model_name]
+        tag_html = (f"<span class='model-tag' style='background:rgba(45,212,191,0.12);"
+                    f"color:{sel_meta['tag_color']}'>{sel_meta.get('tag','')}</span>"
+                    if sel_meta.get('tag') else "")
+        st.markdown(f"""
+        <div class='model-card'>
+            <div class='model-card-name'>{selected_model_name.split(' ', 1)[1] if ' ' in selected_model_name else selected_model_name}</div>
+            {tag_html}
+            <div class='model-card-desc'>{sel_meta['desc']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        selected_model_name = list(MODEL_CATALOGUE.keys())[0]
 
     filtered_df = df.copy()
-    if sel_company != "All" and "Company" in df.columns:
-        filtered_df = filtered_df[filtered_df["Company"] == sel_company]
-    if sel_dept != "All":
-        filtered_df = filtered_df[filtered_df["Department"] == sel_dept]
-    if "MonthlyIncome" in df.columns:
-        filtered_df = filtered_df[
-            filtered_df["MonthlyIncome"].between(inc_range[0], inc_range[1])
-        ]
 
     st.divider()
 
@@ -969,7 +947,7 @@ def risk_color(pct):
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 
-if page == "📈 AI Model Intelligence":
+if page == "AI Model Intelligence":
     with st.spinner("Training & benchmarking models…"):
         (results_df, trained_models, best_name, best_model_obj,
          best_thresh_val, ML_FEATURES, scaler, y_te, roc_data) = run_model_comparison(hash(str(df.shape)))
@@ -1348,7 +1326,7 @@ We therefore tune the threshold to maximise recall ≥ 80%, accepting some false
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 
-elif page == "👥 Employees to Review":
+elif page == "Employees to Review":
     st.markdown("""
     <div class='page-header'>
         <h1>👥 Employees to Review</h1>
@@ -1472,7 +1450,7 @@ elif page == "👥 Employees to Review":
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 
-elif page == "🔮 Risk Predictor [Beta]":
+elif page == "Risk Predictor [Beta]":
     st.markdown("""
     <div class='page-header'>
         <h1>🔮 Individual Risk Predictor</h1>
@@ -1569,7 +1547,7 @@ elif page == "🔮 Risk Predictor [Beta]":
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 
-elif page == "📊 Executive Summary":
+elif page == "Executive Summary":
     st.header("📊 Executive Summary Dashboard (Active Headcount Engine)")
     st.markdown("---")
 
@@ -1641,15 +1619,15 @@ elif page == "📊 Executive Summary":
             total_ever_served = current_headcount + total_period_attrition
             attrition_rate_val = (total_period_attrition / total_ever_served * 100) if total_ever_served > 0 else 0.0
 
-            with kpi_col1:
+            with kpi_col2:
                 metric_card("Active Headcount", f"{int(current_headcount):,}", "Active staff at end of selected window",
                             progress=current_headcount/total_ever_served if total_ever_served > 0 else 0,
                             progress_label=f"{current_headcount/total_ever_served:.0%} of total ever served" if total_ever_served > 0 else "")
-            with kpi_col2:
+            with kpi_col3:
                 metric_card("Total Window Departures", f"{int(total_period_attrition):,}", "Employees who left during the selected period",
                             progress=total_period_attrition/total_ever_served if total_ever_served > 0 else 0,
                             progress_label=f"{total_period_attrition/total_ever_served:.0%} of total ever served" if total_ever_served > 0 else "")
-            with kpi_col3:
+            with kpi_col1:
                 metric_card("Period Attrition Rate", f"{attrition_rate_val:.2f}%", "Share of total workforce that resigned in this window",
                             progress=min(attrition_rate_val/100, 1.0),
                             progress_label="Resignation share within selected period")
@@ -1843,7 +1821,7 @@ elif page == "📊 Executive Summary":
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 
-elif page == "🎯 Attrition Drivers":
+elif page == "Attrition Drivers":
     st.header("🎯 Resignation Drivers Analysis")
     st.caption("A descriptive view of existing resignation patterns based only on the selected HR driver columns. This section does not use model feature importance or prediction outputs.")
     st.markdown(
@@ -2529,7 +2507,7 @@ elif page == "🎯 Attrition Drivers":
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 
-elif page == "⚖️ Wellbeing/Performance":
+elif page == "Wellbeing/Performance":
     st.header("⚖️ Wellbeing & Performance Matrix")
     st.markdown("---")
 
@@ -2832,7 +2810,7 @@ elif page == "⚖️ Wellbeing/Performance":
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 #----------------------------------------------------------------------------------------------------------------------------------------------------
 
-elif page == "💰 Attrition Simulator":
+elif page == "Attrition Simulator":
     st.header("📊 Attrition Financial Risk Indicator")
     st.markdown("---")
 
